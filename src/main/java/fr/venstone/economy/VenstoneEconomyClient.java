@@ -1,0 +1,193 @@
+package fr.venstone.economy;
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.LoreComponent;
+import net.minecraft.item.ItemStack;
+import net.minecraft.screen.slot.Slot;
+import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
+import net.minecraft.util.Identifier;
+import java.util.Locale;
+
+public final class VenstoneEconomyClient implements ClientModInitializer {
+    public static final SalesTracker TRACKER = new SalesTracker();
+    public static boolean hudVisible = true;
+    private static KeyBinding openKey;
+
+    @Override public void onInitializeClient() {
+        KeyBinding.Category category = KeyBinding.Category.create(
+                Identifier.of("venstone", "general")
+        );
+        openKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.venstone_economy.open",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_O,
+                category
+        ));
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            if (!overlay) TRACKER.recordConfirmedSale(message.getString());
+        });
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            TRACKER.tick();
+            while (openKey.wasPressed()) if (client.currentScreen == null) client.setScreen(new EconomyScreen(null));
+            if (client.player != null && client.currentScreen != null) scanVisibleShop(client);
+        });
+        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (hudVisible && mc.player != null && mc.world != null) renderHud(drawContext, mc);
+        });
+    }
+
+    private static void scanVisibleShop(MinecraftClient client) {
+        if (client.player == null) return;
+        for (Slot slot : client.player.currentScreenHandler.slots) {
+            ItemStack stack = slot.getStack();
+            if (stack == null || stack.isEmpty()) continue;
+            String itemName = stack.getName().getString();
+            StringBuilder visible = new StringBuilder(itemName);
+            LoreComponent lore = stack.get(DataComponentTypes.LORE);
+            if (lore != null) for (Text line : lore.lines()) visible.append(' ').append(line.getString());
+            TRACKER.updateShopDetails(visible.toString(), itemName);
+        }
+    }
+
+    private static void renderHud(DrawContext ctx, MinecraftClient mc) {
+        int width = 264, x = mc.getWindow().getScaledWidth() - width - 9, y = 9;
+        int visible = (int)TRACKER.items().stream().filter(i -> i.enabled).count();
+        if (visible == 0) return;
+        int height = 31 + visible * 49;
+        ctx.fill(x, y, x + width, y + height, 0xE812101B);
+        ctx.fill(x, y, x + width, y + 2, 0xFFB65BEE);
+        ctx.fill(x, y + 2, x + 1, y + height, 0xFF6C3B91);
+        ctx.drawTextWithShadow(mc.textRenderer, Text.literal("VENSTONE  /  ECONOMY"), x + 10, y + 8, 0xFFF5EAFE);
+        String total = visible + " suivi(s)";
+        ctx.drawTextWithShadow(mc.textRenderer, Text.literal(total), x + width - mc.textRenderer.getWidth(total) - 10, y + 8, 0xFFB9A9C8);
+        int row = 0;
+        long now = System.currentTimeMillis();
+        for (TrackedItem item : TRACKER.items()) {
+            if (!item.enabled) continue;
+            int ry = y + 27 + row * 49;
+            int sold = item.soldItems(now), remaining = item.remainingItems(now);
+            int cap = Math.max(1, item.limitItems);
+            ctx.drawTextWithShadow(mc.textRenderer, Text.literal(trim(item.name, 25)), x + 10, ry, 0xFFFFFFFF);
+            String count = formatStacks(sold) + " / " + formatStacks(cap) + " stacks";
+            ctx.drawTextWithShadow(mc.textRenderer, Text.literal(count), x + 10, ry + 13, 0xFFD8D0E0);
+            String timer = item.nextExpiryMillis(now) > 0 ? "prochain + " + formatTime(item.nextExpiryMillis(now)) : "aucun reset actif";
+            ctx.drawTextWithShadow(mc.textRenderer, Text.literal(timer), x + width - mc.textRenderer.getWidth(timer) - 10, ry + 13,
+                    remaining == 0 ? 0xFFFF8888 : 0xFFBDA6D7);
+            int barX = x + 10, barY = ry + 29, barW = width - 20;
+            ctx.fill(barX, barY, barX + barW, barY + 4, 0xFF393341);
+            int fill = Math.round(barW * Math.min(1f, sold / (float)cap));
+            if (fill > 0) ctx.fill(barX, barY, barX + fill, barY + 4, remaining == 0 ? 0xFFE15D70 : 0xFFAA65D6);
+            String money = String.format(Locale.FRANCE, "Max : %.2f €", item.maximumRevenue());
+            ctx.drawTextWithShadow(mc.textRenderer, Text.literal(money), x + 10, ry + 36, 0xFFB8E8C4);
+            String free = formatStacks(remaining) + " stacks dispo.";
+            ctx.drawTextWithShadow(mc.textRenderer, Text.literal(free), x + width - mc.textRenderer.getWidth(free) - 10, ry + 36, 0xFFB8E8C4);
+            row++;
+        }
+    }
+
+    private static String trim(String s, int max) { return s.length() <= max ? s : s.substring(0, max - 1) + "…"; }
+    private static String formatStacks(int items) { return String.format(Locale.ROOT, "%.2f", items / 64.0); }
+    static String formatTime(long millis) {
+        long seconds = Math.max(0, millis / 1000);
+        long hours = seconds / 3600, minutes = (seconds % 3600) / 60, secs = seconds % 60;
+        return hours > 0 ? String.format(Locale.ROOT, "%dh %02dm", hours, minutes) : String.format(Locale.ROOT, "%02d:%02d", minutes, secs);
+    }
+
+    public static final class EconomyScreen extends Screen {
+        private final Screen parent;
+        private TextFieldWidget idField, nameField, priceField, limitField;
+        protected EconomyScreen(Screen parent) { super(Text.literal("Venstone Economy Assistant")); this.parent = parent; }
+
+        @Override protected void init() {
+            int cx = width / 2, left = cx - 154;
+            addDrawableChild(ButtonWidget.builder(Text.literal("◀ Précédent"), b -> { TRACKER.selectPrevious(); refreshFields(); })
+                    .dimensions(left, 42, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Suivant ▶"), b -> { TRACKER.selectNext(); refreshFields(); })
+                    .dimensions(cx + 9, 42, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("+ 1 stack vendue"), b -> TRACKER.addSelected(64))
+                    .dimensions(left, 75, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("+ 1 unité vendue"), b -> TRACKER.addSelected(1))
+                    .dimensions(cx + 9, 75, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("− 1 stack (annuler)"), b -> TRACKER.adjustSelected(-64))
+                    .dimensions(left, 102, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Vider l'historique"), b -> TRACKER.resetSelected())
+                    .dimensions(cx + 9, 102, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Afficher / masquer HUD"), b -> {
+                hudVisible = !hudVisible; b.setMessage(Text.literal(hudVisible ? "Masquer HUD" : "Afficher HUD"));
+            }).dimensions(left, 129, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Activer / désactiver"), b -> {
+                TrackedItem item = TRACKER.selected(); if (item != null) { item.enabled = !item.enabled; TRACKER.save(); b.setMessage(Text.literal(item.enabled ? "Désactiver cet objet" : "Activer cet objet")); }
+            }).dimensions(cx + 9, 129, 145, 22).build());
+
+            int fy = 183;
+            idField = field(left, fy, "ID objet (ex. minecraft:cactus)");
+            nameField = field(cx + 9, fy, "Nom affiché");
+            priceField = field(left, fy + 27, "Prix par unité (€)");
+            limitField = field(cx + 9, fy + 27, "Limite (stacks)");
+            addDrawableChild(ButtonWidget.builder(Text.literal("Ajouter cet objet"), b -> {
+                try {
+                    double price = Double.parseDouble(priceField.getText().replace(',', '.'));
+                    int limit = Integer.parseInt(limitField.getText());
+                    if (TRACKER.addItem(idField.getText(), nameField.getText(), price, limit)) refreshFields();
+                } catch (RuntimeException ignored) { }
+            }).dimensions(left, fy + 57, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Appliquer les réglages"), b -> applySelected())
+                    .dimensions(cx + 9, fy + 57, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Supprimer l'objet"), b -> { TRACKER.removeSelected(); refreshFields(); })
+                    .dimensions(left, fy + 85, 145, 22).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Retour"), b -> close())
+                    .dimensions(cx - 55, height - 30, 110, 20).build());
+            refreshFields();
+        }
+        private TextFieldWidget field(int x, int y, String hint) {
+            TextFieldWidget f = new TextFieldWidget(textRenderer, x, y, 145, 20, Text.literal(hint));
+            f.setPlaceholder(Text.literal(hint)); f.setMaxLength(100); addDrawableChild(f); return f;
+        }
+        private void refreshFields() {
+            TrackedItem item = TRACKER.selected();
+            if (item != null && priceField != null) {
+                idField.setText(item.id); nameField.setText(item.name);
+                priceField.setText(String.format(Locale.ROOT, "%.4f", item.unitPrice));
+                limitField.setText(Integer.toString(Math.max(1, item.limitItems / 64)));
+            }
+        }
+        private void applySelected() {
+            TrackedItem item = TRACKER.selected(); if (item == null) return;
+            try {
+                item.name = nameField.getText().isBlank() ? item.name : nameField.getText().trim();
+                item.unitPrice = Math.max(0, Double.parseDouble(priceField.getText().replace(',', '.')));
+                item.limitItems = Math.max(1, Integer.parseInt(limitField.getText())) * 64;
+                TRACKER.save();
+            } catch (RuntimeException ignored) { }
+        }
+        @Override public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+            renderBackground(context, mouseX, mouseY, delta);
+            context.fill(width / 2 - 165, 10, width / 2 + 165, height - 10, 0xD91A1522);
+            context.fill(width / 2 - 165, 10, width / 2 + 165, 12, 0xFFB65BEE);
+            context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 19, 0xFFF5EAFE);
+            TrackedItem item = TRACKER.selected();
+            long now = System.currentTimeMillis();
+            String status = item == null ? "Aucun objet" : item.name + "  •  " + item.soldItems(now) + "/" + item.limitItems + " unités actives  •  Max " + String.format(Locale.FRANCE, "%.2f €", item.maximumRevenue());
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal(status), width / 2, 30, 0xFFD8C4ED);
+            super.render(context, mouseX, mouseY, delta);
+            context.drawTextWithShadow(textRenderer, Text.literal("Chaque vente crée son propre délai de 60 min. Les ventes expirent une par une."), width / 2 - 154, 162, 0xFFBBAFC6);
+            context.drawTextWithShadow(textRenderer, Text.literal("Lecture automatique des ventes confirmées et des informations visibles du shop."), width / 2 - 154, 174, 0xFFFFC78A);
+        }
+        @Override public void close() { if (client != null) client.setScreen(parent); }
+        @Override public boolean shouldPause() { return false; }
+    }
+}
