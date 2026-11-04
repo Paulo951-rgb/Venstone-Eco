@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "venstone_economy_assistant",
+  "version": "${version}",
+  "name": "Venstone Economy Assistant",
+  "description": "Client-side economic sales-limit tracker with a configurable HUD.",
+  "authors": ["Venstone Economy Assistant contributors"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["fr.venstone.economy.VenstoneEconomyClient"],
+    "modmenu": ["fr.venstone.economy.VenstoneModMenu"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {"modmenu": ">=17.0.0"},
+  "custom": {"modmenu": {"links": {"modmenu.discord": "https://venstone.xyz/"}}}
+}
