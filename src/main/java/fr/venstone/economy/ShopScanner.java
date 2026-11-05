@@ -53,7 +53,6 @@ public final class ShopScanner {
     private final ShopCatalog catalog;
     private final List<ScannedItem> lastScan = new ArrayList<>();
     private String lastCategory = "";
-    private int stableScans;
     private long lastScanAt;
 
     public ShopScanner(ShopCatalog catalog) { this.catalog = catalog; }
@@ -82,10 +81,8 @@ public final class ShopScanner {
             lastScan.clear();
             lastScan.addAll(result.items());
             lastCategory = result.category();
-            stableScans = 0;
             return false;
         }
-        stableScans++;
 
         lastScanAt = System.currentTimeMillis();
         boolean changed = false;
@@ -178,6 +175,5 @@ public final class ShopScanner {
     public void reset() {
         lastScan.clear();
         lastCategory = "";
-        stableScans = 0;
     }
 }
