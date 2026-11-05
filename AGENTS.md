@@ -12,22 +12,31 @@ limits. No server component, no packet inspection, no automation of selling.
 ## Layout
 - `src/main/java/fr/venstone/economy/`
   - `ShopTextParser` — pure text parsing (sale confirmations, price, limit). No Minecraft deps.
+  - `ItemIds` — pure `namespace:path` id helpers. No Minecraft deps.
+  - `Durations` — pure duration formatting for the HUD. No Minecraft deps.
+  - `Clock` / `SystemClock` — monotonic, wall-anchored time source for the rolling window.
   - `TrackedItem` — one tracked item; holds per-sale lots and the rolling window math.
+  - `ItemResolver` — registry-backed id/name lookup; degrades to the pure rules when no registry.
   - `SalesTracker` — item list, selection, persistence (atomic JSON writes), sale recording.
-  - `VenstoneEconomyClient` — entrypoint: keybinding, chat listener, HUD element, config screen.
+  - `ItemListWidget` — scrollable tracked-item list for the config screen.
+  - `VenstoneEconomyClient` — entrypoint: keybinds, chat listener, HUD element, config screen.
   - `VenstoneModMenu` — Mod Menu integration.
-- `src/main/resources/assets/venstone_economy_assistant/lang/` — translation keys for the
-  keybinding (`key.venstone_economy.open`) and its category (`key.category.venstone.general`).
+- `src/main/resources/assets/venstone_economy_assistant/lang/` — translation keys (`en_us`, `fr_fr`)
+  for the keybinds, the HUD and the config screen.
 
 ## Conventions and gotchas
 - Keep parsing conservative: prefer false negatives over false positives. `ShopTextParser`
   rejects negated confirmations, "revendu"-style prefixes, and trailing text after the price.
 - The one-hour window is per lot: each sale expires 60 minutes after its own timestamp.
   `TrackedItem.normalize(now)` also clamps limits/prices and migrates the legacy
-  `soldItems`/`windowStartedAt` fields.
+  `soldItems`/`windowStartedAt`/`unitPrice` fields.
 - HUD rendering uses `HudElementRegistry.attachElementAfter(VanillaHudElements.CHAT, ...)`.
   `HudRenderCallback` is deprecated; do not reintroduce it.
 - Saves are written to a `.tmp` file and moved atomically. Persist only when something changed.
-- Config lives at `<config>/venstone-economy.json`. Seeding defaults happens only on first run.
+  A failed save is surfaced through `SalesTracker.lastError()` and shown on the config screen.
+- Config lives at `<config>/venstone-economy.json`, schema v2. Older bare-array configs and
+  pre-v2 `unitPrice` fields migrate on load. A single malformed entry is skipped, not fatal.
+- Seeding defaults happens only on first run (when the file does not exist).
+- The shop scan only reads slots that do not belong to the player's own inventory.
 - The Venstone shop lore/confirmation wording is not yet validated in-game; update
   `ShopTextParser` patterns once the real text is known.

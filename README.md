@@ -17,8 +17,21 @@ The client reads visible item names and vanilla Lore from the currently open con
 
 Detection is deliberately conservative: a confirmation is ignored when it is explicitly negated (for example "vous n'avez pas vendu"), when the verb is part of a different word ("revendu"), or when unexpected trailing text follows the price. Identical confirmations repeated within two seconds are treated as a single sale to avoid double counting.
 
+## Usage
+- `O` opens the configuration screen; `H` toggles the HUD. Both keybinds are rebindable in Options > Controls under the "Venstone Economy" category.
+- The configuration screen lists tracked items on the left. Selecting a row loads it into the editor fields on the right.
+- Editor fields: item id (e.g. `minecraft:cactus`), display name, configured price per unit, and limit in stacks. "Find id" fills the id from the best registry match for the name or id you typed.
+- "Apply settings" writes the fields to the selected item; "Add item" creates a new tracked item.
+- Manual correction: "+ 1 stack sold" / "+ 1 unit sold" add a sale lot, "- 1 stack (undo)" removes from the most recent lots, "Clear history" empties all lots for the item.
+- "Delete item" removes the selected item. "Disable/Enable this item" excludes it from detection and the HUD.
+- HUD controls: "Show/Hide HUD" and "HUD corner" (top/bottom, left/right).
+- The HUD shows, per enabled item, sold/limit stacks, time until the next lot expires, the maximum revenue estimate, and stacks still available. When an item reaches its limit, a chat notification is shown once.
+
+## Configuration file
+The config is written to `<config>/venstone-economy.json` (schema v2). It stores the item list, the selection, and the HUD preferences. Writes are atomic (`.tmp` file then move); if a write fails, the error is shown on the configuration screen. Legacy bare-array configs and the pre-v2 `unitPrice` field migrate automatically on load.
+
 ## Reliability status
-The exact Venstone shop lore and confirmation wording still needs in-game validation. Custom GUI text not stored in vanilla item Lore is not accessible to this implementation. The build is verified (Gradle build plus 37 automated tests); an in-game test is still required before this project is marked as verified.
+The exact Venstone shop lore and confirmation wording still needs in-game validation. Custom GUI text not stored in vanilla item Lore is not accessible to this implementation. The build is verified (Gradle build plus 69 automated tests); an in-game test is still required before this project is marked as verified.
 
 ## Build
 Requires JDK 21. The Gradle wrapper pins Gradle 9.2.1 (Fabric Loom 1.14.x requires Gradle 9.2 or newer).

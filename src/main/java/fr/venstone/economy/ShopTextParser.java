@@ -53,6 +53,11 @@ public final class ShopTextParser {
         } catch (RuntimeException e) { return null; }
     }
     public record Sale(String itemName, int amount, double totalPrice) {}
+
+    /** Stable key for a sale, so differently worded confirmations of the same sale collapse. */
+    public static String saleSignature(Sale sale) {
+        return normalize(sale.itemName()) + '|' + sale.amount() + '|' + Math.round(sale.totalPrice() * 100);
+    }
     public static Sale readSale(String text) {
         String raw = text == null ? "" : text.trim();
         if (raw.isEmpty() || NEGATED_SALE.matcher(raw).find()) return null;
