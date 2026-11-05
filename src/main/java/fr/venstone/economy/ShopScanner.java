@@ -48,9 +48,7 @@ public final class ShopScanner {
                               Double buyPrice, Integer sellLimit, Integer buyLimit) { }
 
     /** Result of scanning one container. */
-    public record ScanResult(String category, List<ScannedItem> items, boolean shopLike) {
-        public static ScanResult empty() { return new ScanResult("", List.of(), false); }
-    }
+    public record ScanResult(String category, List<ScannedItem> items, boolean shopLike) { }
 
     private final ShopCatalog catalog;
     private final List<ScannedItem> lastScan = new ArrayList<>();
@@ -61,9 +59,6 @@ public final class ShopScanner {
     public ShopScanner(ShopCatalog catalog) { this.catalog = catalog; }
 
     public long lastScanAt() { return lastScanAt; }
-
-    /** Best-effort label for the currently open category, for display. */
-    public String lastCategory() { return lastCategory; }
 
     /**
      * Scans the open container, if any.
