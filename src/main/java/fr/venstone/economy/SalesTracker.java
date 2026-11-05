@@ -45,7 +45,7 @@ public final class SalesTracker {
     private boolean firstRun;
     private boolean hudVisible = true;
     private HudCorner hudCorner = HudCorner.TOP_RIGHT;
-    private ResetMode resetMode = ResetMode.ROLLING;
+    private ResetMode resetMode = ResetMode.WINDOW;
     private String lastMessage;
     private long lastMessageAt;
     private String lastError;
@@ -78,7 +78,7 @@ public final class SalesTracker {
     public void setResetMode(ResetMode mode) {
         if (mode == null || mode == resetMode) return;
         resetMode = mode;
-        for (TrackedItem item : items) { item.resetMode = mode; item.limitReachedAt = 0; }
+        for (TrackedItem item : items) { item.resetMode = mode; item.limitReachedAt = 0; item.windowStart = 0; }
         dirty = true;
         save();
     }
@@ -368,9 +368,12 @@ public final class SalesTracker {
     public enum HudCorner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
     /**
-     * How a reached sell limit recovers. The Venstone shop (EconomyShopGUI) has no fixed sliding
-     * window: its restock either counts down once the limit is fully reached, or resets on a fixed
-     * clock schedule. {@code ROLLING} keeps the original per-lot model for other servers.
+     * How a reached sell limit recovers.
+     *
+     * <p>Venstone (EconomyShopGUI) uses {@link #WINDOW}: a fixed 60-minute window anchored on the
+     * first sale of the period, so the whole quota returns 60 minutes after that first sale.
+     * {@link #ROLLING} keeps the original per-lot model, {@link #TIMER} counts down once the limit
+     * is fully reached, and {@link #CLOCK} resets at the next hour boundary.
      */
-    public enum ResetMode { ROLLING, TIMER, CLOCK }
+    public enum ResetMode { WINDOW, ROLLING, TIMER, CLOCK }
 }

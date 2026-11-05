@@ -30,9 +30,11 @@ public final class TrackedItem {
     /** Set once a limit-reached notification has been shown for the current saturation. */
     public boolean limitNotified;
     /** How a reached limit recovers; see {@link SalesTracker.ResetMode}. */
-    public SalesTracker.ResetMode resetMode = SalesTracker.ResetMode.ROLLING;
+    public SalesTracker.ResetMode resetMode = SalesTracker.ResetMode.WINDOW;
     /** When the limit was first reached, used by the {@code TIMER}/{@code CLOCK} reset modes. */
     public long limitReachedAt;
+    /** Start of the fixed 60-minute window, used by the {@code WINDOW} reset mode. */
+    public long windowStart;
     /** Legacy single-window fields kept only so older config files can be migrated. */
     public int soldItems;
     public long windowStartedAt;
@@ -57,7 +59,7 @@ public final class TrackedItem {
     public void normalize(long now) {
         if (limitItems < 1) limitItems = ITEMS_PER_STACK * 36;
         if (limitItems > MAX_LIMIT_ITEMS) limitItems = MAX_LIMIT_ITEMS;
-        if (resetMode == null) resetMode = SalesTracker.ResetMode.ROLLING;
+        if (resetMode == null) resetMode = SalesTracker.ResetMode.WINDOW;
         if (legacyUnitPrice != null) {
             if (configuredPrice <= 0 && Double.isFinite(legacyUnitPrice) && legacyUnitPrice > 0) {
                 configuredPrice = legacyUnitPrice;
@@ -75,6 +77,16 @@ public final class TrackedItem {
         for (SaleLot lot : lots) if (lot != null && lot.amount > 0 && lot.soldAt > 0) active += lot.amount;
 
         switch (resetMode) {
+            case WINDOW -> {
+                // Fixed 60-minute window anchored on the first sale: the whole quota returns 60
+                // minutes after that first sale, then a fresh window starts at the next sale.
+                if (windowStart <= 0 && active > 0) windowStart = firstSaleAt();
+                if (windowStart > 0 && now - windowStart >= SalesTracker.WINDOW_MILLIS) {
+                    lots.clear();
+                    active = 0;
+                    windowStart = 0;
+                }
+            }
             case TIMER -> {
                 // The restock countdown starts only once the limit is fully reached, then the whole
                 // quota returns at once. Before that, sales simply accumulate.
@@ -128,6 +140,12 @@ public final class TrackedItem {
         return (from / SalesTracker.WINDOW_MILLIS + 1) * SalesTracker.WINDOW_MILLIS;
     }
 
+    private long firstSaleAt() {
+        long oldest = Long.MAX_VALUE;
+        for (SaleLot lot : lots) if (lot != null && lot.amount > 0 && lot.soldAt > 0) oldest = Math.min(oldest, lot.soldAt);
+        return oldest == Long.MAX_VALUE ? 0 : oldest;
+    }
+
     public int soldItems(long now) {
         normalize(now);
         long total = 0;
@@ -139,6 +157,9 @@ public final class TrackedItem {
 
     public long nextExpiryMillis(long now) {
         normalize(now);
+        if (resetMode == SalesTracker.ResetMode.WINDOW) {
+            return windowStart > 0 ? Math.max(0, SalesTracker.WINDOW_MILLIS - (now - windowStart)) : 0;
+        }
         if (resetMode != SalesTracker.ResetMode.ROLLING) {
             if (limitReachedAt <= 0) return 0;
             long boundary = resetMode == SalesTracker.ResetMode.CLOCK
@@ -169,6 +190,8 @@ public final class TrackedItem {
         if (resetMode != SalesTracker.ResetMode.ROLLING && limitReachedAt <= 0 && soldTotal() >= limitItems) {
             limitReachedAt = now;
         }
+        // The fixed window is anchored on the very first sale of the period.
+        if (resetMode == SalesTracker.ResetMode.WINDOW && windowStart <= 0) windowStart = now;
     }
 
     private long soldTotal() {
@@ -196,6 +219,7 @@ public final class TrackedItem {
         windowStartedAt = 0;
         limitNotified = false;
         limitReachedAt = 0;
+        windowStart = 0;
     }
 
     public double maximumRevenue() { return limitItems * effectivePrice(); }

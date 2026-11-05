@@ -32,9 +32,10 @@ limits. No server component, no packet inspection, no automation of selling.
   between verb and amount) and the **real** tooltip is
   `Clic gauche: Acheter: 2.00€ / Clic droit: Vendre: 0.12€ / Limite d'achat: 192 / Limite de vente: 384`.
   Sell price and sell limit must win over the buy ones. Keep these strings in the tests.
-- The rolling window is configurable per `SalesTracker.ResetMode`: `ROLLING` (original per-lot
-  window), `TIMER` (countdown started when the limit is reached) and `CLOCK` (fixed hour).
-  EconomyShopGUI has no fixed sliding window, so the default may need to be switched in-game.
+- The reset model is configurable per `SalesTracker.ResetMode`. Venstone's observed rule is
+  `WINDOW` (the default): a fixed 60-minute window anchored on the **first** sale, so the whole
+  quota returns 60 minutes after that first sale (~36 stacks per item). `ROLLING` keeps the
+  per-lot model, `TIMER` counts down once the limit is reached, `CLOCK` resets on the hour.
 - HUD rendering uses `HudElementRegistry.attachElementAfter(VanillaHudElements.CHAT, ...)`.
   `HudRenderCallback` is deprecated; do not reintroduce it.
 - Saves are written to a `.tmp` file and moved atomically. Persist only when something changed.

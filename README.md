@@ -13,13 +13,13 @@ Client-side Fabric utility for tracking per-item shop sale limits on Venstone.
 The shop is EconomyShopGUI. Its sell limit does not use a fixed sliding window, so the app offers
 three models, selectable from the configuration screen:
 
+- **60 min from 1st sale** (default, matches Venstone) — a fixed 60-minute window anchored on the
+  first sale; the whole quota (~36 stacks per item) returns 60 minutes after that first sale.
 - **rolling 60 min** — each sale expires 60 minutes after its own timestamp (per-lot).
 - **timer from 0** — the countdown starts only once the limit is fully reached, then the whole
   quota returns at once (EconomyShopGUI `auto-restock-*-sell`).
 - **fixed hour** — the quota returns at the next hour boundary after saturation
   (EconomyShopGUI `auto-restock-*-sell-frequency`).
-
-Pick the one that matches what you observe in game.
 
 ## Automatic read-only detection
 The client reads visible item names and vanilla Lore from the currently open container and parses recognizable price/limit labels. It records sales only from recognizable explicit non-overlay game-chat confirmations. It does not inspect network packets, send commands, click shop buttons, or automate selling.
@@ -42,7 +42,7 @@ The config is written to `<config>/venstone-economy.json` (schema v2). It stores
 ## Reliability status
 The Venstone confirmation and tooltip wording have been captured in game and are covered by tests
 (`Vous avez vendu avec succès x656 Canne à sucre pour 78.72€.`; `Clic droit: Vendre: 0.12€`;
-`Limite de vente: 384`). Custom GUI text not stored in vanilla item Lore is not accessible to this implementation. The build is verified (Gradle build plus 78 automated tests); an in-game test is still required before this project is marked as verified.
+`Limite de vente: 384`). Custom GUI text not stored in vanilla item Lore is not accessible to this implementation. The build is verified (Gradle build plus 82 automated tests); an in-game test is still required before this project is marked as verified.
 
 ## Build
 Requires JDK 21. The Gradle wrapper pins Gradle 9.2.1 (Fabric Loom 1.14.x requires Gradle 9.2 or newer).

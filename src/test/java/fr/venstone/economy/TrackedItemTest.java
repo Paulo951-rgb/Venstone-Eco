@@ -23,6 +23,7 @@ class TrackedItemTest {
 
     @Test void eachLotExpiresOnItsOwnSchedule() {
         TrackedItem item = item(64 * 36);
+        item.resetMode = SalesTracker.ResetMode.ROLLING;
         item.addSale(10, NOW);
         item.addSale(20, NOW + 30 * 60_000L);
         assertEquals(30, item.soldItems(NOW + 31 * 60_000L));
@@ -68,6 +69,7 @@ class TrackedItemTest {
 
     @Test void nextExpiryTracksOldestLot() {
         TrackedItem item = item(64 * 36);
+        item.resetMode = SalesTracker.ResetMode.ROLLING;
         item.addSale(1, NOW);
         item.addSale(1, NOW + 1000);
         assertEquals(SalesTracker.WINDOW_MILLIS - 500, item.nextExpiryMillis(NOW + 500));
@@ -135,6 +137,35 @@ class TrackedItemTest {
     }
 
     // --- Reset models: Venstone's shop (EconomyShopGUI) has no fixed sliding window. ---
+
+    @Test void windowModeIsTheDefault() {
+        assertEquals(SalesTracker.ResetMode.WINDOW, item(64).resetMode);
+    }
+
+    @Test void windowModeResetsSixtyMinutesAfterTheFirstSale() {
+        TrackedItem item = item(64 * 36);
+        item.addSale(64, NOW);
+        item.addSale(64, NOW + 10 * 60_000L);
+        // Still inside the window started by the first sale.
+        assertEquals(128, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS - 1));
+        // The whole quota returns 60 minutes after the FIRST sale, not after the last one.
+        assertEquals(0, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS));
+        assertEquals(64 * 36, item.remainingItems(NOW + SalesTracker.WINDOW_MILLIS));
+    }
+
+    @Test void windowModeStartsAFreshWindowOnTheNextSale() {
+        TrackedItem item = item(1000);
+        item.addSale(10, NOW);
+        assertEquals(0, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS));
+        item.addSale(20, NOW + SalesTracker.WINDOW_MILLIS + 1);
+        assertEquals(20, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS + 2));
+    }
+
+    @Test void windowModeTimerCountsFromTheFirstSale() {
+        TrackedItem item = item(64);
+        item.addSale(1, NOW);
+        assertEquals(SalesTracker.WINDOW_MILLIS - 1000, item.nextExpiryMillis(NOW + 1000));
+    }
 
     @Test void timerModeRestocksOnceLimitIsReached() {
         TrackedItem item = item(64);
