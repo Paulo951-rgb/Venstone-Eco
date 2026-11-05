@@ -27,9 +27,14 @@ limits. No server component, no packet inspection, no automation of selling.
 ## Conventions and gotchas
 - Keep parsing conservative: prefer false negatives over false positives. `ShopTextParser`
   rejects negated confirmations, "revendu"-style prefixes, and trailing text after the price.
-- The one-hour window is per lot: each sale expires 60 minutes after its own timestamp.
-  `TrackedItem.normalize(now)` also clamps limits/prices and migrates the legacy
-  `soldItems`/`windowStartedAt`/`unitPrice` fields.
+- The Venstone shop is EconomyShopGUI. The **real** confirmation is
+  `Vous avez vendu avec succès x656 Canne à sucre pour 78.72€.` (leading `x`, "avec succès"
+  between verb and amount) and the **real** tooltip is
+  `Clic gauche: Acheter: 2.00€ / Clic droit: Vendre: 0.12€ / Limite d'achat: 192 / Limite de vente: 384`.
+  Sell price and sell limit must win over the buy ones. Keep these strings in the tests.
+- The rolling window is configurable per `SalesTracker.ResetMode`: `ROLLING` (original per-lot
+  window), `TIMER` (countdown started when the limit is reached) and `CLOCK` (fixed hour).
+  EconomyShopGUI has no fixed sliding window, so the default may need to be switched in-game.
 - HUD rendering uses `HudElementRegistry.attachElementAfter(VanillaHudElements.CHAT, ...)`.
   `HudRenderCallback` is deprecated; do not reintroduce it.
 - Saves are written to a `.tmp` file and moved atomically. Persist only when something changed.

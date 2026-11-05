@@ -47,5 +47,10 @@
   "venstone_economy.button.remove": "Delete item",
   "venstone_economy.button.suggest": "Find id",
   "venstone_economy.feedback.no_match": "No matching item found.",
-  "venstone_economy.feedback.suggested": "Suggestion: %s"
+  "venstone_economy.feedback.suggested": "Suggestion: %s",
+  "venstone_economy.button.reset_mode": "Reset: %s",
+  "venstone_economy.reset.rolling": "rolling 60 min",
+  "venstone_economy.reset.timer": "timer from 0",
+  "venstone_economy.reset.clock": "fixed hour",
+  "venstone_economy.hint.window": "Pick the reset model that matches the shop: rolling 60 min, a timer started at 0, or a fixed hour."
 }

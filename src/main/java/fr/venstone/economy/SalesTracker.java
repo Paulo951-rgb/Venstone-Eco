@@ -45,6 +45,7 @@ public final class SalesTracker {
     private boolean firstRun;
     private boolean hudVisible = true;
     private HudCorner hudCorner = HudCorner.TOP_RIGHT;
+    private ResetMode resetMode = ResetMode.ROLLING;
     private String lastMessage;
     private long lastMessageAt;
     private String lastError;
@@ -68,7 +69,19 @@ public final class SalesTracker {
     public int selectedIndex() { return selectedIndex; }
     public boolean hudVisible() { return hudVisible; }
     public HudCorner hudCorner() { return hudCorner; }
+    public ResetMode resetMode() { return resetMode; }
     public Clock clock() { return clock; }
+
+    /**
+     * Sets the reset model globally and applies it to every tracked item. Persisted with the config.
+     */
+    public void setResetMode(ResetMode mode) {
+        if (mode == null || mode == resetMode) return;
+        resetMode = mode;
+        for (TrackedItem item : items) { item.resetMode = mode; item.limitReachedAt = 0; }
+        dirty = true;
+        save();
+    }
 
     public TrackedItem selected() {
         if (items.isEmpty()) return null;
@@ -264,6 +277,7 @@ public final class SalesTracker {
         root.addProperty("selectedIndex", selectedIndex);
         root.addProperty("hudVisible", hudVisible);
         root.addProperty("hudCorner", hudCorner.name());
+        root.addProperty("resetMode", resetMode.name());
         JsonArray array = new JsonArray();
         for (TrackedItem item : items) {
             JsonObject json = GSON.toJsonTree(item).getAsJsonObject();
@@ -294,14 +308,16 @@ public final class SalesTracker {
         for (TrackedItem item : items) {
             if (item.name == null || item.name.isBlank()) item.name = ItemIds.path(item.id);
             if (item.lots == null) item.lots = new ArrayList<>();
+            item.resetMode = resetMode;
             item.normalize(now);
         }
         selectedIndex = items.isEmpty() ? 0 : Math.floorMod(selectedIndex, items.size());
         if (items.isEmpty() && firstRun) {
-            items.add(new TrackedItem("minecraft:sugar_cane", "Canne à sucre", 0.12, 36 * 64));
-            items.add(new TrackedItem("minecraft:cactus", "Cactus", 0.05, 36 * 64));
-            items.add(new TrackedItem("minecraft:pumpkin", "Citrouille", 0.10, 36 * 64));
-            items.add(new TrackedItem("minecraft:melon_slice", "Tranche de pastèque", 0.06, 36 * 64));
+            items.add(new TrackedItem("minecraft:sugar_cane", "Canne à sucre", 0.12, 384));
+            items.add(new TrackedItem("minecraft:cactus", "Cactus", 0.05, 384));
+            items.add(new TrackedItem("minecraft:pumpkin", "Citrouille", 0.10, 384));
+            items.add(new TrackedItem("minecraft:melon_slice", "Tranche de pastèque", 0.06, 384));
+            for (TrackedItem item : items) item.resetMode = resetMode;
             save();
         }
     }
@@ -315,6 +331,10 @@ public final class SalesTracker {
         selectedIndex = intOr(root, "selectedIndex", selectedIndex);
         if (root.has("hudCorner") && root.get("hudCorner").isJsonPrimitive()) {
             try { hudCorner = HudCorner.valueOf(root.get("hudCorner").getAsString()); }
+            catch (IllegalArgumentException ignored) { }
+        }
+        if (root.has("resetMode") && root.get("resetMode").isJsonPrimitive()) {
+            try { resetMode = ResetMode.valueOf(root.get("resetMode").getAsString()); }
             catch (IllegalArgumentException ignored) { }
         }
         if (root.has("items") && root.get("items").isJsonArray()) readItems(root.getAsJsonArray("items"));
@@ -346,4 +366,11 @@ public final class SalesTracker {
 
     /** HUD anchoring corner, persisted with the rest of the preferences. */
     public enum HudCorner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
+    /**
+     * How a reached sell limit recovers. The Venstone shop (EconomyShopGUI) has no fixed sliding
+     * window: its restock either counts down once the limit is fully reached, or resets on a fixed
+     * clock schedule. {@code ROLLING} keeps the original per-lot model for other servers.
+     */
+    public enum ResetMode { ROLLING, TIMER, CLOCK }
 }

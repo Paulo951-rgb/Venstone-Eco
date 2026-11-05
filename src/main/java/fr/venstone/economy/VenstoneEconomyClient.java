@@ -184,7 +184,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
         private final Screen parent;
         private ItemListWidget list;
         private TextFieldWidget idField, nameField, priceField, limitField;
-        private ButtonWidget toggleButton, hudButton, cornerButton;
+        private ButtonWidget toggleButton, hudButton, cornerButton, resetButton;
         private String feedback = "";
         private int feedbackColor = 0xFFD8C4ED;
 
@@ -203,7 +203,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
             int fieldWidth = width - 16 - fx;
             int half = (fieldWidth - 6) / 2;
             // Centre the control block vertically and keep it above the Done button.
-            int blockHeight = 72 + 7 * 24;
+            int blockHeight = 72 + 8 * 24;
             int y = Math.max(30, Math.min(34, height - 40 - blockHeight));
 
             idField = field(fx, y, fieldWidth, "venstone_economy.field.id");
@@ -253,8 +253,14 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
                 TRACKER.setHudCorner(nextCorner(TRACKER.hudCorner()));
                 TRACKER.save();
                 reloadList();
-            }).dimensions(fx, row, fieldWidth, 20).build();
+            }).dimensions(fx, row, half, 20).build();
             addDrawableChild(cornerButton);
+            resetButton = ButtonWidget.builder(resetLabel(), b -> {
+                TRACKER.setResetMode(nextResetMode(TRACKER.resetMode()));
+                reloadList();
+            }).dimensions(fx + half + 6, row, half, 20).build();
+            addDrawableChild(resetButton);
+            row += 24;
 
             addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), b -> close())
                     .dimensions(width / 2 - 55, height - 28, 110, 20).build());
@@ -274,9 +280,19 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
             return values[(corner.ordinal() + 1) % values.length];
         }
 
+        private static SalesTracker.ResetMode nextResetMode(SalesTracker.ResetMode mode) {
+            SalesTracker.ResetMode[] values = SalesTracker.ResetMode.values();
+            return values[(mode.ordinal() + 1) % values.length];
+        }
+
         private static Text cornerLabel() {
             String corner = Text.translatable("venstone_economy.corner." + TRACKER.hudCorner().name().toLowerCase(Locale.ROOT)).getString();
             return Text.translatable("venstone_economy.button.hud_corner", corner);
+        }
+
+        private static Text resetLabel() {
+            String mode = Text.translatable("venstone_economy.reset." + TRACKER.resetMode().name().toLowerCase(Locale.ROOT)).getString();
+            return Text.translatable("venstone_economy.button.reset_mode", mode);
         }
 
         /** Rebuilds the list, then reloads the editor fields. Use when the item set changes. */
@@ -304,6 +320,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
             toggleButton.setMessage(Text.translatable(enabled ? "venstone_economy.button.disable" : "venstone_economy.button.enable"));
             hudButton.setMessage(Text.translatable(TRACKER.hudVisible() ? "venstone_economy.button.hide_hud" : "venstone_economy.button.show_hud"));
             cornerButton.setMessage(cornerLabel());
+            resetButton.setMessage(resetLabel());
         }
 
         /** Fills the id field with the best registry match for the current text or display name. */

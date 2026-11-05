@@ -133,4 +133,46 @@ class TrackedItemTest {
         item.normalize(NOW);
         assertEquals(TrackedItem.MAX_LIMIT_ITEMS, item.limitItems);
     }
+
+    // --- Reset models: Venstone's shop (EconomyShopGUI) has no fixed sliding window. ---
+
+    @Test void timerModeRestocksOnceLimitIsReached() {
+        TrackedItem item = item(64);
+        item.resetMode = SalesTracker.ResetMode.TIMER;
+        item.addSale(64, NOW);
+        assertEquals(0, item.remainingItems(NOW + 1));
+        // Just before the restock countdown completes, the item is still capped.
+        assertEquals(64, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS - 1));
+        // The whole quota returns at once once the countdown elapses.
+        assertEquals(0, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS));
+        assertEquals(64, item.remainingItems(NOW + SalesTracker.WINDOW_MILLIS));
+    }
+
+    @Test void timerModeDoesNotExpireBeforeLimitIsReached() {
+        TrackedItem item = item(1000);
+        item.resetMode = SalesTracker.ResetMode.TIMER;
+        item.addSale(10, NOW);
+        // Sales accumulate indefinitely until the limit is hit, unlike the rolling model.
+        assertEquals(10, item.soldItems(NOW + SalesTracker.WINDOW_MILLIS * 3));
+    }
+
+    @Test void clockModeResetsAtTheNextHourBoundary() {
+        TrackedItem item = item(64);
+        item.resetMode = SalesTracker.ResetMode.CLOCK;
+        item.addSale(64, NOW);
+        long boundary = (NOW / SalesTracker.WINDOW_MILLIS + 1) * SalesTracker.WINDOW_MILLIS;
+        assertEquals(64, item.soldItems(boundary - 1));
+        assertEquals(0, item.soldItems(boundary));
+    }
+
+    @Test void nextExpiryReflectsResetMode() {
+        TrackedItem rolling = item(64);
+        rolling.addSale(1, NOW);
+        assertEquals(SalesTracker.WINDOW_MILLIS - 1000, rolling.nextExpiryMillis(NOW + 1000));
+
+        TrackedItem timer = item(64);
+        timer.resetMode = SalesTracker.ResetMode.TIMER;
+        timer.addSale(64, NOW);
+        assertEquals(SalesTracker.WINDOW_MILLIS - 1000, timer.nextExpiryMillis(NOW + 1000));
+    }
 }

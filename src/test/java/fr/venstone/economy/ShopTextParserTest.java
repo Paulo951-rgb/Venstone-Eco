@@ -103,4 +103,35 @@ class ShopTextParserTest {
         assertNull(ShopTextParser.readLimitItems("Limite: 99999999999 stacks"));
         assertNull(ShopTextParser.readLimitItems(null));
     }
+
+    // --- Real Venstone / EconomyShopGUI strings, captured in-game. ---
+
+    @Test void readsRealVenstoneSaleConfirmation() {
+        ShopTextParser.Sale sale = ShopTextParser.readSale("Vous avez vendu avec succès x656 Canne à sucre pour 78.72€.");
+        assertNotNull(sale);
+        assertEquals(656, sale.amount());
+        assertEquals("Canne à sucre", sale.itemName());
+        assertEquals(78.72, sale.totalPrice(), 1e-9);
+    }
+
+    @Test void realVenstoneSaleUnitPriceMatchesLore() {
+        ShopTextParser.Sale sale = ShopTextParser.readSale("Vous avez vendu avec succès x656 Canne à sucre pour 78.72€.");
+        assertEquals(0.12, sale.totalPrice() / sale.amount(), 1e-9);
+    }
+
+    @Test void readsRealVenstoneTooltipPriceAndLimit() {
+        String tooltip = "Sugar Cane Clic gauche: Acheter: 2.00€ Clic droit: Vendre: 0.12€ Limite d'achat: 192 Limite de vente: 384";
+        // The sell price must win over the buy price, and the sell limit over the buy limit.
+        assertEquals(0.12, ShopTextParser.readUnitPrice(tooltip), 1e-9);
+        assertEquals(384, ShopTextParser.readLimitItems(tooltip));
+    }
+
+    @Test void sellPriceWinsOverBuyPrice() {
+        assertEquals(0.12, ShopTextParser.readUnitPrice("Clic gauche: Acheter: 2.00€ Clic droit: Vendre: 0.12€"), 1e-9);
+        assertEquals(0.12, ShopTextParser.readUnitPrice("Buy Price 2.00 Sell Price 0.12"), 1e-9);
+    }
+
+    @Test void sellLimitWinsOverBuyLimit() {
+        assertEquals(384, ShopTextParser.readLimitItems("Limite d'achat: 192 Limite de vente: 384"));
+    }
 }

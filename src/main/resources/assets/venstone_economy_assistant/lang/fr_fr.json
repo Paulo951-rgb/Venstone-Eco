@@ -47,5 +47,10 @@
   "venstone_economy.button.remove": "Supprimer l'objet",
   "venstone_economy.button.suggest": "Trouver l'ID",
   "venstone_economy.feedback.no_match": "Aucun objet correspondant.",
-  "venstone_economy.feedback.suggested": "Suggestion : %s"
+  "venstone_economy.feedback.suggested": "Suggestion : %s",
+  "venstone_economy.button.reset_mode": "Réinit. : %s",
+  "venstone_economy.reset.rolling": "glissant 60 min",
+  "venstone_economy.reset.timer": "chrono dès 0",
+  "venstone_economy.reset.clock": "heure fixe",
+  "venstone_economy.hint.window": "Choisissez le modèle de réinit. du shop : 60 min glissantes, chrono déclenché à 0, ou heure fixe."
 }
