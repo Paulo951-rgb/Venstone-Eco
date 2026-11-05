@@ -1,7 +1,5 @@
 package fr.venstone.economy;
 
-import java.util.Locale;
-
 /**
  * Discrete interface scale steps. Kept free of client types so the clamp and formatting rules are
  * unit-testable; the client only turns an index into a render factor.
@@ -35,7 +33,4 @@ public final class UiScale {
 
     /** Human-readable percentage, e.g. {@code 110%}. */
     public static String label(int index) { return Math.round(factor(index) * 100) + "%"; }
-
-    /** One decimal factor as text, e.g. {@code 1.1}. Used in logs and diagnostics. */
-    public static String factorLabel(int index) { return String.format(Locale.ROOT, "%.1f", factor(index)); }
 }

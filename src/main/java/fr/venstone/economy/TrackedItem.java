@@ -8,8 +8,6 @@ import com.google.gson.annotations.SerializedName;
 
 /** One tracked shop item: its configured values plus its rolling one-hour sale history. */
 public final class TrackedItem {
-    /** Items per Minecraft stack, used only as the default when the real size is unknown. */
-    public static final int ITEMS_PER_STACK = StackMath.DEFAULT_STACK_SIZE;
     /** Sanity ceiling for a configured limit (in items). */
     public static final int MAX_LIMIT_ITEMS = 64 * 100_000;
     /** Sales of the same item recorded within this delay share a single lot. */
@@ -98,11 +96,17 @@ public final class TrackedItem {
             case WINDOW -> {
                 // Fixed 60-minute window anchored on the first sale: the whole quota returns 60
                 // minutes after that first sale, then a fresh window starts at the next sale.
-                if (windowStart <= 0 && active > 0) windowStart = firstSaleAt();
-                if (windowStart > 0 && now - windowStart >= SalesTracker.WINDOW_MILLIS) {
-                    lots.clear();
-                    active = 0;
+                // Re-anchoring on every pass keeps the window honest when a manual correction
+                // removes the sale it was originally anchored on.
+                if (active <= 0) {
                     windowStart = 0;
+                } else {
+                    windowStart = firstSaleAt();
+                    if (windowStart > 0 && now - windowStart >= SalesTracker.WINDOW_MILLIS) {
+                        lots.clear();
+                        active = 0;
+                        windowStart = 0;
+                    }
                 }
             }
             case TIMER -> {

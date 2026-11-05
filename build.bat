@@ -13,5 +13,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Build successful. JAR: build\libs\venstone-economy-assistant-1.2.0.jar
+echo Build successful. JAR: build\libs\venstone-economy-assistant-1.3.0.jar
 pause

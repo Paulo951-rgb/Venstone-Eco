@@ -30,6 +30,11 @@ public final class SalesTracker {
     public static final int SCHEMA_VERSION = 3;
     /** Identical confirmations arriving within this delay are treated as one sale. */
     private static final long DEDUPE_WINDOW_MILLIS = 2_000L;
+    /**
+     * Delay before a failed save is retried. Without it a read-only config directory would make
+     * {@link #tick()} attempt a disk write (and log a warning) twenty times a second.
+     */
+    private static final long SAVE_RETRY_BACKOFF_MILLIS = 10_000L;
     private static final Logger LOGGER = LoggerFactory.getLogger("venstone-economy");
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -148,7 +153,12 @@ public final class SalesTracker {
             changed |= before != item.lots.size();
         }
         if (changed) dirty = true;
-        if (dirty) save();
+        if (dirty && canRetrySave(now)) save();
+    }
+
+    /** True when a pending save may be attempted, honouring the backoff after a failure. */
+    private boolean canRetrySave(long now) {
+        return lastError == null || now - lastErrorAt >= SAVE_RETRY_BACKOFF_MILLIS;
     }
 
     public void addSale(TrackedItem item, int amount) {
@@ -175,39 +185,52 @@ public final class SalesTracker {
      * the item and its optional price; the limit is derived from the item's real stack size.
      */
     public boolean addItem(String id, String name, double price, int stackSize) {
-        if (id == null || id.isBlank()) return false;
-        String resolved = ItemResolver.resolveId(id);
-        String cleanId = resolved != null ? resolved : ItemIds.canonical(id);
-        if (cleanId == null) return false;
-        if (items.stream().anyMatch(i -> i.id != null && i.id.equalsIgnoreCase(cleanId))) return false;
-        double cleanPrice = Double.isFinite(price) && price > 0 ? Math.min(price, ShopTextParser.MAX_UNIT_PRICE) : 0;
-        String cleanName = name == null || name.isBlank() ? ItemResolver.displayName(cleanId) : name.trim();
-        TrackedItem item = new TrackedItem(cleanId, cleanName, cleanPrice, StackMath.limitItems(stackSize));
-        item.stackSize = StackMath.clampStackSize(stackSize);
-        item.resetMode = resetMode;
-        items.add(item);
+        TrackedItem item = trackNewItem(id, name, price, stackSize);
+        if (item == null) return false;
         selectedIndex = items.size() - 1;
         dirty = true;
         save();
         return true;
     }
 
+    /**
+     * Adds a tracked item without persisting or moving the selection, so a bulk import or a shop
+     * scan can add many items with a single save and leave the user's selection alone.
+     *
+     * @return the new item, or {@code null} when the id is invalid or already tracked
+     */
+    public TrackedItem trackNewItem(String id, String name, double price, int stackSize) {
+        if (id == null || id.isBlank()) return null;
+        String resolved = ItemResolver.resolveId(id);
+        String cleanId = resolved != null ? resolved : ItemIds.canonical(id);
+        if (cleanId == null) return null;
+        if (findById(cleanId) != null) return null;
+        double cleanPrice = Double.isFinite(price) && price > 0 ? Math.min(price, ShopTextParser.MAX_UNIT_PRICE) : 0;
+        String cleanName = name == null || name.isBlank() ? ItemResolver.displayName(cleanId) : name.trim();
+        TrackedItem item = new TrackedItem(cleanId, cleanName, cleanPrice, StackMath.limitItems(stackSize));
+        item.stackSize = StackMath.clampStackSize(stackSize);
+        item.resetMode = resetMode;
+        items.add(item);
+        dirty = true;
+        return item;
+    }
+
+    /** Adds many items at once, saving only if something was actually added. */
+    public int addItems(Iterable<ShopCatalog.PriceEntry> entries) {
+        int added = 0;
+        for (ShopCatalog.PriceEntry entry : entries) {
+            if (entry == null || entry.id == null) continue;
+            if (trackNewItem(entry.id, entry.name, entry.hasSellPrice() ? entry.sellPrice : 0, entry.stackSize) != null) {
+                added++;
+            }
+        }
+        if (added > 0) save();
+        return added;
+    }
+
     /** Adds a tracked item with the default stack size; convenience for manual entry. */
     public boolean addItem(String id, String name, double price) {
         return addItem(id, name, price, ItemResolver.stackSize(id));
-    }
-
-    /** Finds an existing tracked item, or creates one from the shop reading. */
-    public TrackedItem trackOrCreate(ShopCatalog.PriceEntry entry) {
-        if (entry == null || entry.id == null) return null;
-        TrackedItem existing = findByNameOrId(entry.id);
-        if (existing == null && entry.name != null) existing = findByNameOrId(entry.name);
-        if (existing != null) return existing;
-        if (!autoTrack) return null;
-        double price = entry.hasSellPrice() ? entry.sellPrice : 0;
-        String name = entry.name != null && !entry.name.isBlank() ? entry.name : ItemResolver.displayName(entry.id);
-        if (!addItem(entry.id, name, price, entry.stackSize)) return null;
-        return selected();
     }
 
     public void removeSelected() {
@@ -216,6 +239,16 @@ public final class SalesTracker {
         selectedIndex = Math.max(0, Math.min(selectedIndex, items.size() - 1));
         dirty = true;
         save();
+    }
+
+    /** Exact identifier lookup, without the fuzzy matching of {@link #findByNameOrId}. */
+    public TrackedItem findById(String id) {
+        String canonical = ItemIds.canonical(id);
+        if (canonical == null) return null;
+        for (TrackedItem item : items) {
+            if (canonical.equalsIgnoreCase(item.id)) return item;
+        }
+        return null;
     }
 
     /** Finds the item whose id, id path or display name best matches the given text. */
@@ -273,9 +306,9 @@ public final class SalesTracker {
      * applied: it is always the shared 36 stacks for every item, so a lore line can never change it.
      * Callers batch several updates and save once.
      */
-    public void applyShopPrices(String id, Double sellPrice, Double buyPrice) {
-        TrackedItem item = findByNameOrId(id);
-        if (item == null) return;
+    public boolean applyShopPrices(String id, Double sellPrice, Double buyPrice) {
+        TrackedItem item = findById(id);
+        if (item == null) return false;
         boolean changed = false;
         if (sellPrice != null && sellPrice > 0 && sellPrice <= ShopTextParser.MAX_UNIT_PRICE && sellPrice != item.observedPrice) {
             item.observedPrice = sellPrice;
@@ -286,6 +319,7 @@ public final class SalesTracker {
             changed = true;
         }
         if (changed) dirty = true;
+        return changed;
     }
 
     private void remember(String signature, long now) {
@@ -301,6 +335,9 @@ public final class SalesTracker {
 
     /** Last save error, or {@code null} when the most recent save succeeded. */
     public String lastError() { return lastError; }
+
+    /** When the last save failed, on the same timeline as {@link Clock#now()}. */
+    long lastErrorAt() { return lastErrorAt; }
 
     public boolean hasRecentError() { return lastError != null && clock.now() - lastErrorAt < 30_000L; }
 

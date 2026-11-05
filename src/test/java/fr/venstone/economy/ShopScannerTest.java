@@ -50,6 +50,14 @@ class ShopScannerTest {
         assertNull(ShopScanner.build("minecraft:stone", "   ", 64, "   "));
     }
 
+    @Test void itemsContainingANavigationWordAreKept() {
+        // Whole-word matching: a real item name must not be filtered out by a substring.
+        assertFalse(ShopScanner.isNavigation("Backpack"));
+        assertFalse(ShopScanner.isNavigation("Homegrown Carrot"));
+        assertFalse(ShopScanner.isNavigation("Fermez la porte"));
+        assertTrue(ShopScanner.isNavigation("Fermer"));
+    }
+
     @Test void navigationDetectionIsCaseAndAccentInsensitive() {
         assertTrue(ShopScanner.isNavigation("PRÉCÉDENT"));
         assertTrue(ShopScanner.isNavigation("precedent"));

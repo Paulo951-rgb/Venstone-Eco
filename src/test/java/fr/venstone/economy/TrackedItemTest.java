@@ -153,6 +153,26 @@ class TrackedItemTest {
         assertEquals(64 * 36, item.remainingItems(NOW + SalesTracker.WINDOW_MILLIS));
     }
 
+    @Test void windowModeHasNoPhantomCountdownAfterManualUndo() {
+        TrackedItem item = item(64 * 36);
+        item.addSale(64, NOW);
+        // Undoing the only sale must clear the window, not leave a countdown running.
+        item.adjustLatestSale(-64, NOW + 1);
+        assertEquals(0, item.soldItems(NOW + 2));
+        assertEquals(0, item.nextExpiryMillis(NOW + 2));
+    }
+
+    @Test void windowModeReanchorsOnTheRemainingSale() {
+        TrackedItem item = item(64 * 36);
+        item.addSale(10, NOW);
+        item.addSale(10, NOW + 5 * 60_000L);
+        // Undo the newest lot; the window must follow the sale that is left, not the removed one.
+        long at = NOW + 5 * 60_000L + 2;
+        item.adjustLatestSale(-10, at);
+        assertEquals(10, item.soldItems(at));
+        assertEquals(SalesTracker.WINDOW_MILLIS - 5 * 60_000L - 2, item.nextExpiryMillis(at));
+    }
+
     @Test void windowModeStartsAFreshWindowOnTheNextSale() {
         TrackedItem item = item(1000);
         item.addSale(10, NOW);

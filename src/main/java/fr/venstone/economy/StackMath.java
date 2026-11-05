@@ -42,15 +42,6 @@ public final class StackMath {
         return revenue(clampStackSize(stackSize), unitPrice);
     }
 
-    /**
-     * Revenue scaled to an hour, so a value earned over a shorter window can be compared on a common
-     * basis. Returns 0 when the window is unknown.
-     */
-    public static double perHour(double revenue, long windowMillis) {
-        if (revenue <= 0 || windowMillis <= 0) return 0;
-        return round2(revenue * (3_600_000.0 / windowMillis));
-    }
-
     /** Formats a quantity as stacks with one decimal, e.g. {@code 12.3}. */
     public static String stacks(int items, int stackSize) {
         int size = clampStackSize(stackSize);

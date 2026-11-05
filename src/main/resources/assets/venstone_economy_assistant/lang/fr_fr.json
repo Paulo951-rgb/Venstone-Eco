@@ -55,7 +55,7 @@
   "venstone_economy.feedback.cleared": "Base de prix vidée.",
   "venstone_economy.feedback.imported": "%d objet(s) importé(s) dans le suivi.",
   "venstone_economy.shop.title": "Prix relevés dans le shop",
-  "venstone_economy.shop.limit": "Limite : %s stacks",
+  "venstone_economy.shop.limit": "Limite : %d stacks",
   "venstone_economy.shop.summary": "%d objet(s) connu(s)  -  %s",
   "venstone_economy.shop.never": "aucun scan pour l'instant",
   "venstone_economy.shop.last_scan": "dernier scan il y a %s",
@@ -73,5 +73,6 @@
   "venstone_economy.hud.max": "max %s",
   "venstone_economy.hud.free": "%s stacks dispo.",
   "venstone_economy.hud.no_price": "prix inconnu",
-  "venstone_economy.list.max": "max %s"
+  "venstone_economy.list.max": "max %s",
+  "venstone_economy.feedback.duplicate": "Cet objet est déjà suivi."
 }

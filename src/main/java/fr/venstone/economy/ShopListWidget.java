@@ -13,12 +13,10 @@ final class ShopListWidget extends EntryListWidget<ShopListWidget.ShopEntry> {
     private static final int ROW_HEIGHT = 20;
 
     private final ShopCatalog catalog;
-    private final long now;
 
     ShopListWidget(MinecraftClient client, ShopCatalog catalog, int width, int height, int y) {
         super(client, width, height, y, ROW_HEIGHT);
         this.catalog = catalog;
-        this.now = System.currentTimeMillis();
         refresh();
     }
 
@@ -45,7 +43,8 @@ final class ShopListWidget extends EntryListWidget<ShopListWidget.ShopEntry> {
             int x = getContentX();
             int width = getContentWidth();
             int y = getContentY();
-            boolean stale = catalog.isStale(entry, now);
+            // Read the clock at render time: a cached value would never let a row turn stale.
+            boolean stale = catalog.isStale(entry, System.currentTimeMillis());
             String label = entry.name == null || entry.name.isBlank() ? entry.id : entry.name;
             String price = entry.hasSellPrice() ? EconomyHud.formatMoney(entry.sellPrice) : "-";
             int priceWidth = client.textRenderer.getWidth(price);
@@ -54,8 +53,9 @@ final class ShopListWidget extends EntryListWidget<ShopListWidget.ShopEntry> {
                     stale ? EconomyHud.Theme.SUBTLE : EconomyHud.Theme.TEXT);
             ctx.drawTextWithShadow(client.textRenderer, Text.literal(price), x + width - priceWidth, y + 1,
                     stale ? EconomyHud.Theme.DANGER : EconomyHud.Theme.MONEY);
-            String detail = Text.translatable("venstone_economy.shop.limit",
-                    StackMath.wholeStacks(entry.limitItems(), entry.stackSize)).getString();
+            // The sell limit is always the universal 36 stacks: the shop's own lore value is shown
+            // nowhere, so it can never be mistaken for the rule the tracker applies.
+            String detail = Text.translatable("venstone_economy.shop.limit", StackMath.LIMIT_STACKS).getString();
             ctx.drawTextWithShadow(client.textRenderer, Text.literal(detail), x, y + 10, EconomyHud.Theme.SUBTLE);
         }
 

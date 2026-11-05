@@ -64,15 +64,8 @@ public final class ShopCatalog {
         public int sellLimit;
         public int buyLimit;
         public int stackSize = StackMath.DEFAULT_STACK_SIZE;
-        public long sellSeenAt;
-        public long buySeenAt;
-        public long limitSeenAt;
-        public long stackSeenAt;
-        /** Timestamps of the last observation attempt, even when nothing usable was read. */
+        /** When any usable value was last read; drives the staleness marker. */
         public long lastSeenAt;
-        public long lastAttemptAt;
-        /** Readings received, used to spot flapping values. */
-        public int samples;
 
         public boolean hasSellPrice() { return sellPrice > 0; }
         public boolean hasBuyPrice() { return buyPrice > 0; }
@@ -83,8 +76,6 @@ public final class ShopCatalog {
             return hasSellLimit() ? sellLimit : StackMath.limitItems(stackSize);
         }
     }
-
-    public List<PriceEntry> entries() { return new ArrayList<>(entries.values()); }
 
     public int size() { return entries.size(); }
 
@@ -109,7 +100,7 @@ public final class ShopCatalog {
      * expose one line keeps the previously stored value. Returns {@code true} when anything changed.
      */
     public boolean record(String id, String name, int stackSize, Double sellPrice, Double buyPrice,
-                          Integer sellLimit, Integer buyLimit, boolean authoritative) {
+                          Integer sellLimit, Integer buyLimit) {
         String cleanId = ItemIds.canonical(id);
         if (cleanId == null) return false;
         long now = clock.getAsLong();
@@ -126,29 +117,22 @@ public final class ShopCatalog {
         else if (entry.name == null) entry.name = ItemIds.path(cleanId);
 
         boolean changed = created;
-        entry.lastAttemptAt = now;
-        entry.samples++;
 
         if (validPrice(sellPrice)) {
-            // A brand-new or clearly different value replaces the old one; an identical reading only
-            // refreshes the timestamp. Either way the value was seen just now, so it is not stale.
-            if (!entry.hasSellPrice() || entry.sellPrice != sellPrice || authoritative) {
-                changed |= entry.sellPrice != sellPrice;
-                entry.sellPrice = sellPrice;
-            }
-            entry.sellSeenAt = now;
+            // A new or different value replaces the old one; an identical reading only refreshes the
+            // timestamp. Either way the value was seen just now, so the entry is not stale.
+            changed |= entry.sellPrice != sellPrice;
+            entry.sellPrice = sellPrice;
             entry.lastSeenAt = now;
         }
         if (validPrice(buyPrice)) {
             changed |= entry.buyPrice != buyPrice;
             entry.buyPrice = buyPrice;
-            entry.buySeenAt = now;
             entry.lastSeenAt = now;
         }
         if (validLimit(sellLimit)) {
             changed |= entry.sellLimit != sellLimit;
             entry.sellLimit = sellLimit;
-            entry.limitSeenAt = now;
             entry.lastSeenAt = now;
         }
         if (validLimit(buyLimit)) {
@@ -158,7 +142,6 @@ public final class ShopCatalog {
         int cleanStack = StackMath.clampStackSize(stackSize);
         if (entry.stackSize != cleanStack) {
             entry.stackSize = cleanStack;
-            entry.stackSeenAt = now;
             changed = true;
         }
         if (changed) dirty = true;

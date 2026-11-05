@@ -55,7 +55,7 @@
   "venstone_economy.feedback.cleared": "Price database cleared.",
   "venstone_economy.feedback.imported": "%d item(s) imported into the tracker.",
   "venstone_economy.shop.title": "Prices read from the shop",
-  "venstone_economy.shop.limit": "Limit: %s stacks",
+  "venstone_economy.shop.limit": "Limit: %d stacks",
   "venstone_economy.shop.summary": "%d item(s) known  -  %s",
   "venstone_economy.shop.never": "no scan yet",
   "venstone_economy.shop.last_scan": "last scan %s ago",
@@ -73,5 +73,6 @@
   "venstone_economy.hud.max": "max %s",
   "venstone_economy.hud.free": "%s stacks free",
   "venstone_economy.hud.no_price": "price unknown",
-  "venstone_economy.list.max": "max %s"
+  "venstone_economy.list.max": "max %s",
+  "venstone_economy.feedback.duplicate": "That item is already tracked."
 }

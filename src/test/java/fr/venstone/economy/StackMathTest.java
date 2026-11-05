@@ -50,13 +50,6 @@ class StackMathTest {
         assertEquals(0.12 * 64, StackMath.perStack(0.12, 0), 1e-9);
     }
 
-    @Test void perHourScalesTheWindow() {
-        assertEquals(100.0, StackMath.perHour(100.0, 3_600_000L), 1e-9);
-        assertEquals(200.0, StackMath.perHour(100.0, 1_800_000L), 1e-9);
-        assertEquals(0.0, StackMath.perHour(100.0, 0), 1e-9);
-        assertEquals(0.0, StackMath.perHour(0, 3_600_000L), 1e-9);
-    }
-
     @Test void stackFormattingIsLocaleIndependent() {
         assertEquals("1.5", StackMath.stacks(96, 64));
         assertEquals("0.0", StackMath.stacks(0, 64));

@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SalesTrackerTest {
@@ -150,6 +151,53 @@ class SalesTrackerTest {
         assertNull(t.findByNameOrId("minecraft:not_tracked"));
     }
 
+    @Test void trackNewItemAddsWithoutStealingTheSelection() {
+        SalesTracker t = fresh();
+        t.select(0);
+        TrackedItem before = t.selected();
+        TrackedItem added = t.trackNewItem("minecraft:diamond", "Diamant", 5.0, 64);
+        assertNotNull(added);
+        assertEquals("minecraft:diamond", added.id);
+        // The editor must keep pointing at the row the user had selected.
+        assertSame(before, t.selected());
+        assertNull(t.trackNewItem("minecraft:diamond", "dup", 1.0, 64));
+    }
+
+    @Test void addItemsPersistsOnceAndKeepsTheSelection() {
+        SalesTracker t = fresh();
+        t.select(0);
+        TrackedItem before = t.selected();
+        ShopCatalog catalog = new ShopCatalog(dir.resolve("prices.json"), () -> NOW);
+        catalog.record("minecraft:wheat", "Blé", 64, 0.33, null, null, null);
+        catalog.record("minecraft:carrot", "Carotte", 64, 0.20, null, null, null);
+        assertEquals(2, t.addItems(catalog.sellableEntries()));
+        assertSame(before, t.selected());
+        assertEquals(0.33, t.findById("minecraft:wheat").configuredPrice, 1e-9);
+        // The bulk add is on disk, not only in memory.
+        assertNotNull(new SalesTracker(file, new TestClock(NOW)).findById("minecraft:carrot"));
+    }
+
+    @Test void applyShopPricesReportsWhetherItChanged() {
+        SalesTracker t = fresh();
+        assertTrue(t.applyShopPrices("minecraft:cactus", 0.42, 0.60));
+        // An identical reading is not a change, so the caller can skip the disk write.
+        assertFalse(t.applyShopPrices("minecraft:cactus", 0.42, 0.60));
+        assertFalse(t.applyShopPrices("minecraft:not_tracked", 1.0, null));
+    }
+
+    @Test void findByIdDoesNotMatchOnSubstrings() {
+        SalesTracker t = fresh();
+        t.addItem("minecraft:melon", "Melon", 0.2, 1);
+        t.addItem("minecraft:melon_slice", "Tranche", 0.1, 1);
+        assertEquals("minecraft:melon", t.findById("minecraft:melon").id);
+        assertEquals("minecraft:melon_slice", t.findById("minecraft:melon_slice").id);
+        // A bare path is still canonicalised into the default namespace...
+        assertEquals("minecraft:melon", t.findById("melon").id);
+        // ...but a partial path must never resolve to an unrelated item.
+        assertNull(t.findById("minecraft:melon slic"));
+        assertNull(t.findById("minecraft:mel"));
+    }
+
     @Test void tickExpiresLotsAndPersists() {
         SalesTracker t = fresh();
         t.addSale(t.findByNameOrId("minecraft:cactus"), 64);
@@ -241,6 +289,20 @@ class SalesTrackerTest {
         t.save();
         assertNotNull(t.lastError());
         assertTrue(t.hasRecentError());
+    }
+
+    @Test void failedSaveIsNotRetriedOnEveryTick() throws Exception {
+        // Parent path is a regular file, so every save fails.
+        Path notADirectory = dir.resolve("not-a-dir");
+        Files.writeString(notADirectory, "x");
+        SalesTracker t = new SalesTracker(notADirectory.resolve("config.json"), new TestClock(NOW));
+        t.addSale(t.findByNameOrId("minecraft:cactus"), 64);
+        assertNotNull(t.lastError());
+        long firstFailureAt = t.lastErrorAt();
+        // Ticks inside the backoff window must not hammer the disk or move the error timestamp.
+        t.tick();
+        t.tick();
+        assertEquals(firstFailureAt, t.lastErrorAt());
     }
 
     @Test void findByNamePrefersLongestMatch() {

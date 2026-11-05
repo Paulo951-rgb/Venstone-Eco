@@ -32,12 +32,14 @@ import java.util.Objects;
 public final class ShopScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger("venstone-economy");
 
-    /** Names of navigation and decoration buttons that must never be stored as shop items. */
-    private static final String[] NAVIGATION_HINTS = {
-            "page suivante", "page precedente", "page précédente", "next page", "previous page",
-            "suivant", "precedent", "précédent", "retour", "back", "fermer", "close",
-            "categorie", "catégorie", "category", "accueil", "home", "quitter", "ferme"
-    };
+    /**
+     * Words that mark a slot as a navigation or decoration button rather than shop stock. Matched as
+     * whole words so an item whose name merely contains one (for example "Backpack") is kept.
+     */
+    private static final java.util.regex.Pattern NAVIGATION_WORDS = java.util.regex.Pattern.compile(
+            "\\b(?:page suivante|page precedente|next page|previous page|suivant|suivants"
+                    + "|precedent|precedents|retour|retours|back|fermer|ferme|close|closes"
+                    + "|categorie|categories|category|accueil|home|quitter|quit)\\b");
 
     /** Matches pagination labels such as "Page 2 / 5" in normalized form. */
     private static final java.util.regex.Pattern PAGE_LABEL =
@@ -88,7 +90,7 @@ public final class ShopScanner {
         boolean changed = false;
         for (ScannedItem scanned : result.items()) {
             if (catalog.record(scanned.registryId(), scanned.name(), scanned.stackSize(), scanned.sellPrice(),
-                    scanned.buyPrice(), scanned.sellLimit(), scanned.buyLimit(), true)) {
+                    scanned.buyPrice(), scanned.sellLimit(), scanned.buyLimit())) {
                 changed = true;
             }
         }
@@ -132,6 +134,8 @@ public final class ShopScanner {
     public static ScannedItem build(String registryId, String displayName, int maxCount, String visibleText) {
         String id = ItemIds.canonical(registryId);
         if (id == null) return null;
+        // A custom UI icon is not a real item; only genuine registry items enter the catalogue.
+        if (!ItemResolver.isRegistered(id)) return null;
         // A blank display name is not a navigation button: fall back to the id path instead.
         if (displayName != null && !displayName.isBlank() && isNavigation(displayName)) return null;
         String text = visibleText == null ? "" : visibleText;
@@ -151,9 +155,7 @@ public final class ShopScanner {
         String lower = ShopTextParser.normalize(name);
         if (lower.isEmpty()) return true;
         if (PAGE_LABEL.matcher(lower).find()) return true;
-        for (String hint : NAVIGATION_HINTS) {
-            if (lower.contains(ShopTextParser.normalize(hint))) return true;
-        }
+        if (NAVIGATION_WORDS.matcher(lower).find()) return true;
         // No letters at all: an arrow, a divider, a blank filler.
         return lower.replaceAll("[^a-z]", "").isEmpty();
     }

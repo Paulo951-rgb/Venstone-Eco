@@ -48,4 +48,6 @@ java {
 tasks.withType(JavaCompile).configureEach {
     options.release = 21
     options.encoding = 'UTF-8'
+    // Full lint, minus classfile noise from dependency annotations (e.g. Gson's errorprone hints).
+    options.compilerArgs << '-Xlint:all' << '-Xlint:-classfile'
 }

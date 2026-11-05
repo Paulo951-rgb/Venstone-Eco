@@ -31,6 +31,8 @@ public final class EconomyScreen extends Screen {
     private ButtonWidget toggleButton, hudButton, cornerButton, resetButton, autoTrackButton;
     private String feedback = "";
     private int feedbackColor = EconomyHud.Theme.MUTED;
+    /** Y of the interface-scale row, remembered so the render pass reuses the real layout. */
+    private int scaleRowY = -1;
 
     public EconomyScreen(Screen parent, ShopCatalog catalog, ShopScanner scanner) {
         super(Text.translatable("venstone_economy.screen.title"));
@@ -156,12 +158,8 @@ public final class EconomyScreen extends Screen {
 
     /** Turns every sellable catalogue entry into a tracked item, skipping the ones already present. */
     private void importCatalog() {
-        int added = 0;
-        for (ShopCatalog.PriceEntry entry : catalog.sellableEntries()) {
-            if (VenstoneEconomyClient.TRACKER.findByNameOrId(entry.id) == null) {
-                if (VenstoneEconomyClient.TRACKER.addItem(entry.id, entry.name, entry.sellPrice, entry.stackSize)) added++;
-            }
-        }
+        // Bulk add: one disk write for the whole import and the current selection is preserved.
+        int added = VenstoneEconomyClient.TRACKER.addItems(catalog.sellableEntries());
         setFeedback(Text.translatable("venstone_economy.feedback.imported", added).getString(),
                 added > 0 ? EconomyHud.Theme.MONEY : EconomyHud.Theme.MUTED);
     }
@@ -220,6 +218,7 @@ public final class EconomyScreen extends Screen {
             tracker.setUiScaleIndex(UiScale.next(tracker.uiScaleIndex()));
             syncSettings();
         }).dimensions(left + wide - small, y, small, 20).build());
+        scaleRowY = y;
     }
 
     private Text scaleLabel() {
@@ -304,9 +303,17 @@ public final class EconomyScreen extends Screen {
         setFeedback(Text.translatable("venstone_economy.feedback.suggested", pick).getString(), EconomyHud.Theme.MONEY);
     }
 
+    /** Parses a price field, treating an empty field as "no price yet" rather than an error. */
+    private static double parsePrice(String text) {
+        String clean = text == null ? "" : text.trim().replace(',', '.');
+        if (clean.isEmpty()) return 0;
+        double value = Double.parseDouble(clean);
+        return Double.isFinite(value) && value > 0 ? value : 0;
+    }
+
     private void addItem() {
         try {
-            double price = Double.parseDouble(priceField.getText().replace(',', '.'));
+            double price = parsePrice(priceField.getText());
             if (VenstoneEconomyClient.TRACKER.addItem(idField.getText(), nameField.getText(), price)) {
                 reloadList();
                 setFeedback(Text.translatable("venstone_economy.feedback.added").getString(), EconomyHud.Theme.MONEY);
@@ -324,12 +331,19 @@ public final class EconomyScreen extends Screen {
         try {
             String newId = idField.getText();
             String resolved = ItemResolver.resolveId(newId);
-            if (resolved != null) item.id = resolved;
-            else if (ItemIds.isValid(newId)) item.id = ItemIds.canonical(newId);
-            else if (!newId.isBlank()) { setFeedback(Text.translatable("venstone_economy.feedback.bad_id").getString(), EconomyHud.Theme.DANGER); return; }
+            String cleanId = resolved != null ? resolved : (ItemIds.isValid(newId) ? ItemIds.canonical(newId) : null);
+            if (cleanId == null) {
+                if (!newId.isBlank()) { setFeedback(Text.translatable("venstone_economy.feedback.bad_id").getString(), EconomyHud.Theme.DANGER); return; }
+            } else {
+                TrackedItem clash = VenstoneEconomyClient.TRACKER.findById(cleanId);
+                if (clash != null && clash != item) {
+                    setFeedback(Text.translatable("venstone_economy.feedback.duplicate").getString(), EconomyHud.Theme.DANGER);
+                    return;
+                }
+                item.id = cleanId;
+            }
             item.name = nameField.getText().isBlank() ? item.name : nameField.getText().trim();
-            double price = Math.max(0, Double.parseDouble(priceField.getText().replace(',', '.')));
-            item.configuredPrice = Math.min(price, ShopTextParser.MAX_UNIT_PRICE);
+            item.configuredPrice = Math.min(parsePrice(priceField.getText()), ShopTextParser.MAX_UNIT_PRICE);
             // The sell limit is universal: always 36 stacks of this item's real stack size.
             item.stackSize = StackMath.clampStackSize(ItemResolver.stackSize(item.id));
             item.limitItems = StackMath.limitItems(item.stackSize());
@@ -355,7 +369,8 @@ public final class EconomyScreen extends Screen {
         if (!feedback.isEmpty()) {
             context.drawCenteredTextWithShadow(textRenderer, Text.literal(feedback), width / 2, height - 40, feedbackColor);
         }
-        String error = tracker.lastError();
+        // Only a recent failure is shown: a stale message would linger long after the disk recovered.
+        String error = tracker.hasRecentError() ? tracker.lastError() : null;
         if (error != null) {
             context.drawCenteredTextWithShadow(textRenderer, Text.translatable("venstone_economy.error.save", error),
                     width / 2, height - 52, EconomyHud.Theme.DANGER);
@@ -406,7 +421,7 @@ public final class EconomyScreen extends Screen {
     }
 
     private void renderSettingsTab(DrawContext context, SalesTracker tracker) {
-        int y = contentTop() + 14 + 24 * 3 + 30 + 24;
+        int y = (scaleRowY >= 0 ? scaleRowY + 24 : contentTop() + 14);
         String scale = Text.translatable("venstone_economy.status.scale", UiScale.label(tracker.uiScaleIndex())).getString();
         context.drawCenteredTextWithShadow(textRenderer, Text.literal(scale), width / 2, y, EconomyHud.Theme.MUTED);
         y += 14;

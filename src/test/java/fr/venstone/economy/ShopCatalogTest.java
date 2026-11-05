@@ -30,7 +30,7 @@ class ShopCatalogTest {
 
     @Test void recordsASellPrice() {
         ShopCatalog c = fresh();
-        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, 2304, null, true));
+        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, 2304, null));
         ShopCatalog.PriceEntry entry = c.get("minecraft:cactus");
         assertNotNull(entry);
         assertEquals(0.05, entry.sellPrice, 1e-9);
@@ -41,17 +41,17 @@ class ShopCatalogTest {
 
     @Test void idIsCanonicalisedAndRejectsGarbage() {
         ShopCatalog c = fresh();
-        assertTrue(c.record("CACTUS", "Cactus", 64, 0.05, null, null, null, true));
+        assertTrue(c.record("CACTUS", "Cactus", 64, 0.05, null, null, null));
         assertNotNull(c.get("minecraft:cactus"));
-        assertFalse(c.record("bad id!", "x", 64, 0.05, null, null, null, true));
-        assertFalse(c.record(null, "x", 64, 0.05, null, null, null, true));
+        assertFalse(c.record("bad id!", "x", 64, 0.05, null, null, null));
+        assertFalse(c.record(null, "x", 64, 0.05, null, null, null));
     }
 
     @Test void aMissingFieldNeverErasesAKnownValue() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, 0.10, 2304, 500, true);
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, 0.10, 2304, 500);
         // A later tooltip that failed to expose the sell price must not wipe it.
-        c.record("minecraft:cactus", "Cactus", 64, null, null, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, null, null, null, null);
         ShopCatalog.PriceEntry entry = c.get("minecraft:cactus");
         assertEquals(0.05, entry.sellPrice, 1e-9);
         assertEquals(0.10, entry.buyPrice, 1e-9);
@@ -61,20 +61,20 @@ class ShopCatalogTest {
 
     @Test void aNewValueUpdatesTheStoredPrice() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true);
-        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.07, null, null, null, true));
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
+        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.07, null, null, null));
         assertEquals(0.07, c.get("minecraft:cactus").sellPrice, 1e-9);
     }
 
     @Test void identicalValueDoesNotReportAChange() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true);
-        assertFalse(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true));
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
+        assertFalse(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null));
     }
 
     @Test void invalidPricesAreIgnored() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, -1.0, Double.NaN, -5, 0, true);
+        c.record("minecraft:cactus", "Cactus", 64, -1.0, Double.NaN, -5, 0);
         ShopCatalog.PriceEntry entry = c.get("minecraft:cactus");
         assertFalse(entry.hasSellPrice());
         assertFalse(entry.hasBuyPrice());
@@ -83,20 +83,20 @@ class ShopCatalogTest {
 
     @Test void absurdPriceIsRejected() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, ShopTextParser.MAX_UNIT_PRICE + 1, null, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, ShopTextParser.MAX_UNIT_PRICE + 1, null, null, null);
         assertFalse(c.get("minecraft:cactus").hasSellPrice());
     }
 
     @Test void limitItemsHonoursTheRealStackSize() {
         ShopCatalog c = fresh();
         // 36 stacks of 16-item items is 576 items, not 2304.
-        c.record("minecraft:egg", "Œuf", 16, 0.02, null, null, null, true);
+        c.record("minecraft:egg", "Œuf", 16, 0.02, null, null, null);
         assertEquals(StackMath.limitItems(16), c.get("minecraft:egg").limitItems());
     }
 
     @Test void staleEntriesAreDetected() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
         assertFalse(c.isStale(c.get("minecraft:cactus"), NOW));
         assertFalse(c.isStale(c.get("minecraft:cactus"), NOW + ShopCatalog.STALE_MILLIS));
         assertTrue(c.isStale(c.get("minecraft:cactus"), NOW + ShopCatalog.STALE_MILLIS + 1));
@@ -104,15 +104,15 @@ class ShopCatalogTest {
 
     @Test void entriesWithoutASellPriceAreNotSellable() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, null, 0.10, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, null, 0.10, null, null);
         assertEquals(0, c.sellableEntries().size());
     }
 
     @Test void sellableEntriesAreSortedByPriceDescending() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true);
-        c.record("minecraft:diamond", "Diamant", 64, 5.0, null, null, null, true);
-        c.record("minecraft:wheat", "Blé", 64, 0.33, null, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
+        c.record("minecraft:diamond", "Diamant", 64, 5.0, null, null, null);
+        c.record("minecraft:wheat", "Blé", 64, 0.33, null, null, null);
         var entries = c.sellableEntries();
         assertEquals(3, entries.size());
         assertEquals("minecraft:diamond", entries.get(0).id);
@@ -122,7 +122,7 @@ class ShopCatalogTest {
 
     @Test void persistsAndReloads() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, 0.10, 2304, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, 0.10, 2304, null);
         assertTrue(c.save());
 
         ShopCatalog reloaded = new ShopCatalog(file, () -> clock);
@@ -136,7 +136,7 @@ class ShopCatalogTest {
 
     @Test void clearEmptiesTheCatalogue() {
         ShopCatalog c = fresh();
-        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true);
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
         c.clear();
         assertEquals(0, c.size());
         assertNull(c.get("minecraft:cactus"));
@@ -148,7 +148,7 @@ class ShopCatalogTest {
         ShopCatalog c = new ShopCatalog(file, () -> clock);
         assertEquals(0, c.size());
         // A fresh reading still works after the bad file.
-        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null, true));
+        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null));
     }
 
     @Test void malformedEntryIsSkippedButOthersSurvive() throws Exception {
@@ -163,6 +163,26 @@ class ShopCatalogTest {
         assertNotNull(c.get("minecraft:cactus"));
         assertNotNull(c.get("minecraft:diamond"));
         assertEquals(2, c.size());
+    }
+
+    @Test void placeholderEntryIsNotSellableUntilAPriceArrives() {
+        ShopCatalog c = fresh();
+        // A first reading with no usable price still registers the entry...
+        assertTrue(c.record("minecraft:cactus", "Cactus", 64, null, null, null, null));
+        assertNotNull(c.get("minecraft:cactus"));
+        assertEquals(0, c.sellableEntries().size());
+        // ...and the next scan fills it in.
+        assertTrue(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null));
+        assertEquals(1, c.sellableEntries().size());
+    }
+
+    @Test void identicalReadingIsStillNotStale() {
+        ShopCatalog c = fresh();
+        c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null);
+        // Re-seeing the same price must refresh the freshness marker even without a value change.
+        clock = NOW + ShopCatalog.STALE_MILLIS - 1;
+        assertFalse(c.record("minecraft:cactus", "Cactus", 64, 0.05, null, null, null));
+        assertFalse(c.isStale(c.get("minecraft:cactus"), clock));
     }
 
     @Test void missingFileStartsEmpty() {

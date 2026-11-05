@@ -105,10 +105,12 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
         if (!SCANNER.scan(client)) return;
         boolean changed = false;
         for (ShopCatalog.PriceEntry entry : CATALOG.sellableEntries()) {
-            if (TRACKER.findByNameOrId(entry.id) != null) {
-                TRACKER.applyShopPrices(entry.id, entry.sellPrice, entry.hasBuyPrice() ? entry.buyPrice : null);
-                changed = true;
-            } else if (TRACKER.autoTrack() && TRACKER.addItem(entry.id, entry.name, entry.sellPrice, entry.stackSize)) {
+            if (TRACKER.findById(entry.id) != null) {
+                // Only the exact id is matched here: a fuzzy lookup could push a price onto a
+                // different item whose name happens to overlap.
+                changed |= TRACKER.applyShopPrices(entry.id, entry.sellPrice, entry.hasBuyPrice() ? entry.buyPrice : null);
+            } else if (TRACKER.autoTrack() && TRACKER.trackNewItem(entry.id, entry.name, entry.sellPrice, entry.stackSize) != null) {
+                // trackNewItem keeps the current selection, so browsing the shop never jumps the editor.
                 changed = true;
             }
         }
@@ -125,7 +127,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
         double unit = sale.totalPrice() / sale.amount();
         TrackedItem item = TRACKER.findByNameOrId(sale.itemName());
         if (item == null) return;
-        CATALOG.record(item.id, item.name, item.stackSize(), unit, null, null, null, true);
+        CATALOG.record(item.id, item.name, item.stackSize(), unit, null, null, null);
         CATALOG.save();
     }
 

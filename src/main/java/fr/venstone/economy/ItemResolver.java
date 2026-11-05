@@ -28,6 +28,23 @@ public final class ItemResolver {
         }
     }
 
+    /**
+     * True when the id names an item that actually exists in the registry. Used to reject a client
+     * mod's custom UI icons, which are not real items and must never enter the shop catalogue.
+     * Returns {@code true} when the registry is unavailable, so pure callers are never blocked.
+     */
+    public static boolean isRegistered(String id) {
+        String canonical = ItemIds.canonical(id);
+        if (canonical == null) return false;
+        Identifier parsed = Identifier.tryParse(canonical);
+        if (parsed == null) return false;
+        try {
+            return Registries.ITEM.containsId(parsed);
+        } catch (RuntimeException | LinkageError unavailable) {
+            return true;
+        }
+    }
+
     /** Localized display name, or the readable path when the id cannot be resolved. */
     public static String displayName(String id) {
         String canonical = ItemIds.canonical(id);

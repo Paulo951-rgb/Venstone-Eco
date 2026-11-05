@@ -55,8 +55,9 @@ two consecutive scans.
     (e.g. `minecraft:cactus`), display name, unit sell price. "Find id" fills the id from the best
     registry match. "Apply" writes the fields; "Add" creates a new item; "Remove" deletes it;
     "Disable/Enable" excludes it from detection and the HUD.
-  - **Shop prices** — every price discovered in the shop, richest first, with its limit and a
-    freshness marker. "Import into tracker" turns all of them into tracked items at once.
+  - **Shop prices** — every price discovered in the shop, richest first, with the universal 36-stack
+    limit and a freshness marker. "Import into tracker" turns all of them into tracked items at once
+    (one disk write, and your current selection is preserved).
   - **Settings** — HUD visibility, HUD corner, reset model, auto-add of newly seen items, and the
     interface scale (60% to 160%, click the middle button to return to 100%).
 - Manual correction: "+ 1 stack sold" / "+ 1 unit sold" add a sale, "- 1 stack" removes from the most
@@ -75,7 +76,7 @@ automatically on load, and a single malformed entry is skipped rather than disca
 The Venstone confirmation and tooltip wording have been captured in game and are covered by tests
 (`Vous avez vendu avec succès x656 Canne à sucre pour 78.72€.`; `Clic droit: Vendre: 0.12€`;
 `Limite de vente: 384`). Custom GUI text not stored in vanilla item Lore is not accessible to this
-implementation. The build is verified (Gradle build plus 137 automated tests); an in-game test is
+implementation. The build is verified (Gradle build plus 146 automated tests); an in-game test is
 still required before this project is marked as verified.
 
 ## Build

@@ -49,6 +49,16 @@ selling. The mod only reads what the client already displays (open container slo
   Sell price and sell limit must win over the buy ones. Keep these strings in the tests.
 - `ShopScanner.build(...)` is the pure, unit-testable decision layer (id, navigation filter, prices);
   `describe(ItemStack)` only extracts the raw fields and delegates. Keep logic in `build`.
+- Navigation/decoration names are matched as whole words (`NAVIGATION_WORDS`), so an item whose name
+  merely contains one ("Backpack") is still kept. Never go back to plain substring matching.
+- The shop's own lore limit is never displayed or applied. Every UI surface shows the universal
+  `StackMath.LIMIT_STACKS`; showing the lore number invites users to believe it is configurable.
+- Look items up by exact id (`SalesTracker.findById`) in scanner-driven paths; the fuzzy
+  `findByNameOrId` is only for text a human typed.
+- Bulk paths (`trackNewItem`, `addItems`) add items without moving the selection and save once, so a
+  shop scan never steals the editor's row or writes the file once per item.
+- A failed save is retried only after `SAVE_RETRY_BACKOFF_MILLIS`; `tick()` runs twenty times a
+  second, so retrying on every tick would hammer a read-only config directory.
 - Never mutate a list's entries from inside that list's own `mouseClicked` handler; that corrupts the
   widget's iteration. Selection changes call `syncFields`; only explicit actions call `reloadList`.
 - The reset model is configurable per `SalesTracker.ResetMode`. Venstone's observed rule is
@@ -68,5 +78,6 @@ selling. The mod only reads what the client already displays (open container slo
   A failed save is surfaced through `SalesTracker.lastError()` and shown on the config screen.
 - Seeding defaults happens only on first run (when the file does not exist).
 - The shop scan only reads slots that do not belong to the player's own inventory.
-- The Venstone shop lore/confirmation wording is not yet validated in-game; update
-  `ShopTextParser` patterns once the real text is known.
+- The Venstone confirmation and tooltip wording captured in game is covered by tests. A full
+  in-game run is still required before the build is considered verified end to end; update the
+  `ShopTextParser` patterns if the server changes its wording.
