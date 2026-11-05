@@ -1,12 +1,12 @@
 @echo off
 setlocal
-where gradle >nul 2>nul
+where java >nul 2>nul
 if errorlevel 1 (
-  echo Gradle is not installed or not in PATH. Install Gradle 9.x, then retry.
+  echo Java 21 is not installed or not in PATH. Install JDK 21, then retry.
   pause
   exit /b 1
 )
-gradle clean build
+call gradlew.bat clean build
 if errorlevel 1 (
   echo Build failed. Copy the full error output and send it for diagnosis.
   pause

@@ -18,6 +18,5 @@
     "java": ">=21",
     "fabric-api": "*"
   },
-  "suggests": {"modmenu": ">=17.0.0"},
-  "custom": {"modmenu": {"links": {"modmenu.discord": "https://venstone.xyz/"}}}
+  "suggests": {"modmenu": ">=17.0.0"}
 }

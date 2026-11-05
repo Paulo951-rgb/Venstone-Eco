@@ -5,12 +5,18 @@ import java.util.Iterator;
 import java.util.List;
 
 public final class TrackedItem {
+    /** Items per Minecraft stack; used only for display and stack-based input. */
+    public static final int ITEMS_PER_STACK = 64;
+    /** Sanity ceiling for a configured limit (in items). */
+    public static final int MAX_LIMIT_ITEMS = 64 * 100_000;
+
     public String id;
     public String name;
     public double unitPrice;
     public int limitItems;
     public boolean enabled;
     public List<SaleLot> lots = new ArrayList<>();
+    /** Legacy single-window fields kept only so older config files can be migrated. */
     public int soldItems;
     public long windowStartedAt;
 
@@ -20,6 +26,8 @@ public final class TrackedItem {
     }
     public void normalize(long now) {
         if (limitItems < 1) limitItems = 64 * 36;
+        if (limitItems > MAX_LIMIT_ITEMS) limitItems = MAX_LIMIT_ITEMS;
+        if (!Double.isFinite(unitPrice) || unitPrice < 0) unitPrice = 0;
         if (lots == null) lots = new ArrayList<>();
         if (lots.isEmpty() && soldItems > 0 && windowStartedAt > 0) lots.add(new SaleLot(windowStartedAt, soldItems));
         soldItems = 0; windowStartedAt = 0;
