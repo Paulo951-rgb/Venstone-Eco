@@ -52,7 +52,6 @@ class SalesTrackerTest {
         assertFalse(t.addItem("", "x", 1, 1));
         assertFalse(t.addItem("  ", "x", 1, 1));
         assertFalse(t.addItem("bad id!", "x", 1, 1));
-        assertFalse(t.addItem("minecraft:diamond", "x", 1, 0));
         assertFalse(t.addItem("minecraft:CACTUS", "dup", 1, 1));
         assertEquals(before, t.items().size());
     }
@@ -131,13 +130,24 @@ class SalesTrackerTest {
         assertEquals(20, t.findByNameOrId("minecraft:cactus").soldItems(clock.now()));
     }
 
-    @Test void updateShopDetailsReadsLore() {
+    @Test void applyShopPricesReadsBothPricesButNeverTheLimit() {
         SalesTracker t = fresh();
-        t.updateShopDetails("Cactus Prix: 0,42 € Limite: 12 stacks", "Cactus");
+        t.applyShopPrices("minecraft:cactus", 0.42, 0.60);
         TrackedItem cactus = t.findByNameOrId("minecraft:cactus");
         assertNotNull(cactus);
         assertEquals(0.42, cactus.observedPrice, 1e-9);
-        assertEquals(12 * 64, cactus.limitItems);
+        assertEquals(0.60, cactus.observedBuyPrice, 1e-9);
+        // The sell limit is universal (36 stacks), so no lore limit can ever change it.
+        assertEquals(StackMath.limitItems(cactus.stackSize()), cactus.limitItems);
+    }
+
+    @Test void applyShopPricesIgnoresAbsurdValuesAndUnknownItems() {
+        SalesTracker t = fresh();
+        t.applyShopPrices("minecraft:cactus", ShopTextParser.MAX_UNIT_PRICE + 1, -3.0);
+        assertEquals(0.0, t.findByNameOrId("minecraft:cactus").observedPrice, 1e-9);
+        assertEquals(0.0, t.findByNameOrId("minecraft:cactus").observedBuyPrice, 1e-9);
+        t.applyShopPrices("minecraft:not_tracked", 1.0, 2.0);
+        assertNull(t.findByNameOrId("minecraft:not_tracked"));
     }
 
     @Test void tickExpiresLotsAndPersists() {
@@ -158,7 +168,8 @@ class SalesTrackerTest {
         TrackedItem wheat = reloaded.findByNameOrId("minecraft:wheat");
         assertNotNull(wheat);
         assertEquals(0.33, wheat.configuredPrice, 1e-9);
-        assertEquals(10 * 64, wheat.limitItems);
+        // The sell limit is universal: it is re-derived as 36 stacks, not from the old argument.
+        assertEquals(StackMath.limitItems(10), wheat.limitItems);
     }
 
     @Test void persistsHudVisibility() {

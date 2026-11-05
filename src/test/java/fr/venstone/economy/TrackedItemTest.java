@@ -100,7 +100,7 @@ class TrackedItemTest {
         item.legacyUnitPrice = 0.42;
         item.normalize(NOW);
         assertEquals(0.42, item.configuredPrice, 1e-9);
-        assertEquals(0.42, item.effectivePrice(), 1e-9);
+        assertEquals(0.42, item.effectiveSellPrice(), 1e-9);
     }
 
     @Test void resetClearsHistoryAndNotification() {

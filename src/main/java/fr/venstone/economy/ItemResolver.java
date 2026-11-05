@@ -44,18 +44,41 @@ public final class ItemResolver {
         return ItemIds.path(id);
     }
 
+    /**
+     * Real maximum stack size of an item, read from the registry. Falls back to the default size
+     * when the registry is unavailable or the id is unknown, so callers never have to null-check.
+     */
+    public static int stackSize(String id) {
+        String canonical = ItemIds.canonical(id);
+        if (canonical != null) {
+            Identifier parsed = Identifier.tryParse(canonical);
+            if (parsed != null) {
+                try {
+                    if (Registries.ITEM.containsId(parsed)) {
+                        return StackMath.clampStackSize(Registries.ITEM.get(parsed).getMaxCount());
+                    }
+                } catch (RuntimeException | LinkageError unavailable) {
+                    // Fall through to the default.
+                }
+            }
+        }
+        return StackMath.DEFAULT_STACK_SIZE;
+    }
+
     /** Candidate ids whose id or localized name matches the query; empty when no registry is loaded. */
     public static List<String> suggestions(String query, int limit) {
         List<String> out = new ArrayList<>();
         if (limit <= 0) return out;
         String normalizedQuery = ShopTextParser.normalize(query);
+        // An empty query would otherwise return an arbitrary first item, which reads as a random
+        // suggestion; ask the user for a name or id instead.
+        if (normalizedQuery.isEmpty()) return out;
         try {
             for (Identifier id : Registries.ITEM.getIds()) {
                 if (!id.getNamespace().equals("minecraft")) continue;
                 Item item = Registries.ITEM.get(id);
-                boolean matchesId = normalizedQuery.isEmpty() || ShopTextParser.normalize(id.getPath()).contains(normalizedQuery);
-                boolean matchesName = !normalizedQuery.isEmpty()
-                        && ShopTextParser.normalize(item.getName().getString()).contains(normalizedQuery);
+                boolean matchesId = ShopTextParser.normalize(id.getPath()).contains(normalizedQuery);
+                boolean matchesName = ShopTextParser.normalize(item.getName().getString()).contains(normalizedQuery);
                 if (!matchesId && !matchesName) continue;
                 out.add(id.toString());
                 if (out.size() >= limit) break;

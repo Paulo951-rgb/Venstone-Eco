@@ -8,8 +8,8 @@ import com.google.gson.annotations.SerializedName;
 
 /** One tracked shop item: its configured values plus its rolling one-hour sale history. */
 public final class TrackedItem {
-    /** Items per Minecraft stack; used for display and stack-based input. */
-    public static final int ITEMS_PER_STACK = 64;
+    /** Items per Minecraft stack, used only as the default when the real size is unknown. */
+    public static final int ITEMS_PER_STACK = StackMath.DEFAULT_STACK_SIZE;
     /** Sanity ceiling for a configured limit (in items). */
     public static final int MAX_LIMIT_ITEMS = 64 * 100_000;
     /** Sales of the same item recorded within this delay share a single lot. */
@@ -21,10 +21,18 @@ public final class TrackedItem {
     public String name;
     /** Price the user configured; never overwritten by observed sales. */
     public double configuredPrice;
-    /** Last unit price observed in a confirmed sale, or {@code 0} when never seen. */
+    /** Last unit sell price observed in a confirmed sale, or {@code 0} when never seen. */
     public double observedPrice;
-    /** Maximum number of items allowed in the rolling window. */
-    public int limitItems;
+    /** Last unit buy price read from the shop, or {@code 0} when unknown. */
+    public double observedBuyPrice;
+    /** Real maximum stack size of this item, read from the item stack; 64 when unknown. */
+    public int stackSize = StackMath.DEFAULT_STACK_SIZE;
+    /**
+     * Maximum number of items allowed per window. The sell limit is the same for every item
+     * ({@link StackMath#LIMIT_STACKS} stacks), so this is derived from the stack size rather than
+     * configured per item.
+     */
+    public int limitItems = StackMath.limitItems(StackMath.DEFAULT_STACK_SIZE);
     public boolean enabled;
     public List<SaleLot> lots = new ArrayList<>();
     /** Set once a limit-reached notification has been shown for the current saturation. */
@@ -52,12 +60,21 @@ public final class TrackedItem {
         this.enabled = true;
     }
 
-    /** Price used for revenue estimates: the configured price, or the observed one as a fallback. */
-    public double effectivePrice() { return configuredPrice > 0 ? configuredPrice : observedPrice; }
+    /** Sell price used for revenue estimates: the configured price, or the observed one as fallback. */
+    public double effectiveSellPrice() { return configuredPrice > 0 ? configuredPrice : observedPrice; }
+
+    /** Real stack size, clamped to a usable value. */
+    public int stackSize() { return StackMath.clampStackSize(stackSize); }
+
+    /** Item capacity of the shared 36-stack limit for this item's stack size. */
+    public int limitItems() {
+        return limitItems > 0 ? limitItems : StackMath.limitItems(stackSize());
+    }
 
     /** Drops expired lots, migrates legacy fields and clamps invalid values. */
     public void normalize(long now) {
-        if (limitItems < 1) limitItems = ITEMS_PER_STACK * 36;
+        stackSize = StackMath.clampStackSize(stackSize);
+        if (limitItems < 1) limitItems = StackMath.limitItems(stackSize);
         if (limitItems > MAX_LIMIT_ITEMS) limitItems = MAX_LIMIT_ITEMS;
         if (resetMode == null) resetMode = SalesTracker.ResetMode.WINDOW;
         if (legacyUnitPrice != null) {
@@ -68,6 +85,7 @@ public final class TrackedItem {
         }
         if (!Double.isFinite(configuredPrice) || configuredPrice < 0) configuredPrice = 0;
         if (!Double.isFinite(observedPrice) || observedPrice < 0) observedPrice = 0;
+        if (!Double.isFinite(observedBuyPrice) || observedBuyPrice < 0) observedBuyPrice = 0;
         if (lots == null) lots = new ArrayList<>();
         if (lots.isEmpty() && soldItems > 0 && windowStartedAt > 0) lots.add(new SaleLot(windowStartedAt, soldItems));
         soldItems = 0;
@@ -90,7 +108,7 @@ public final class TrackedItem {
             case TIMER -> {
                 // The restock countdown starts only once the limit is fully reached, then the whole
                 // quota returns at once. Before that, sales simply accumulate.
-                if (active >= limitItems && limitReachedAt <= 0) limitReachedAt = now;
+                if (active >= limitItems() && limitReachedAt <= 0) limitReachedAt = now;
                 if (limitReachedAt > 0 && now - limitReachedAt >= SalesTracker.WINDOW_MILLIS) {
                     lots.clear();
                     active = 0;
@@ -100,7 +118,7 @@ public final class TrackedItem {
             }
             case CLOCK -> {
                 // Fixed-schedule reset: the quota returns at the next hour boundary after saturation.
-                if (active >= limitItems && limitReachedAt <= 0) limitReachedAt = now;
+                if (active >= limitItems() && limitReachedAt <= 0) limitReachedAt = now;
                 if (limitReachedAt > 0 && now >= nextClockBoundary(limitReachedAt)) {
                     lots.clear();
                     active = 0;
@@ -117,10 +135,10 @@ public final class TrackedItem {
                 long remaining = 0;
                 for (SaleLot lot : lots) remaining += lot.amount;
                 active = remaining;
-                if (active >= limitItems && limitReachedAt <= 0) limitReachedAt = now;
+                if (active >= limitItems() && limitReachedAt <= 0) limitReachedAt = now;
             }
         }
-        if (active < limitItems) {
+        if (active < limitItems()) {
             limitNotified = false;
             limitReachedAt = 0;
         }
@@ -153,7 +171,7 @@ public final class TrackedItem {
         return (int) Math.min(Integer.MAX_VALUE, total);
     }
 
-    public int remainingItems(long now) { return Math.max(0, limitItems - soldItems(now)); }
+    public int remainingItems(long now) { return Math.max(0, limitItems() - soldItems(now)); }
 
     public long nextExpiryMillis(long now) {
         normalize(now);
@@ -187,7 +205,7 @@ public final class TrackedItem {
         }
         if (!merged) lots.add(new SaleLot(now, amount));
         // Start the restock countdown at the sale that reaches the limit, not at the next tick.
-        if (resetMode != SalesTracker.ResetMode.ROLLING && limitReachedAt <= 0 && soldTotal() >= limitItems) {
+        if (resetMode != SalesTracker.ResetMode.ROLLING && limitReachedAt <= 0 && soldTotal() >= limitItems()) {
             limitReachedAt = now;
         }
         // The fixed window is anchored on the very first sale of the period.
@@ -222,7 +240,11 @@ public final class TrackedItem {
         windowStart = 0;
     }
 
-    public double maximumRevenue() { return limitItems * effectivePrice(); }
+    /** Revenue of the whole quota at the effective sell price. */
+    public double maximumRevenue() { return StackMath.revenue(limitItems(), effectiveSellPrice()); }
+
+    /** Derived economics view for this item. */
+    public ItemEconomics economics(long now) { return ItemEconomics.of(this, now); }
 
     public static final class SaleLot {
         public long soldAt;

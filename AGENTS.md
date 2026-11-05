@@ -1,7 +1,8 @@
 # Venstone Economy Assistant — repository guide
 
-Client-side Fabric mod (Minecraft 1.21.11) that tracks rolling one-hour shop sale
-limits. No server component, no packet inspection, no automation of selling.
+Client-side Fabric mod (Minecraft 1.21.11) that tracks the Venstone shop's per-item sell limits and
+shows a compact, scalable economy HUD. No server component, no packet inspection, no automation of
+selling. The mod only reads what the client already displays (open container slots, chat lines).
 
 ## Build
 - JDK 21 required. Use the wrapper: `./gradlew clean build` (Windows: `gradlew.bat`).
@@ -11,18 +12,32 @@ limits. No server component, no packet inspection, no automation of selling.
 
 ## Layout
 - `src/main/java/fr/venstone/economy/`
-  - `ShopTextParser` — pure text parsing (sale confirmations, price, limit). No Minecraft deps.
+  - `ShopTextParser` — pure text parsing (sale confirmations, sell/buy price, sell/buy limit). No Minecraft deps.
   - `ItemIds` — pure `namespace:path` id helpers. No Minecraft deps.
+  - `StackMath` — pure stack/limit/revenue math: the 36-stack rule, real stack sizes, money rounding.
   - `Durations` — pure duration formatting for the HUD. No Minecraft deps.
-  - `Clock` / `SystemClock` — monotonic, wall-anchored time source for the rolling window.
-  - `TrackedItem` — one tracked item; holds per-sale lots and the rolling window math.
-  - `ItemResolver` — registry-backed id/name lookup; degrades to the pure rules when no registry.
-  - `SalesTracker` — item list, selection, persistence (atomic JSON writes), sale recording.
-  - `ItemListWidget` — scrollable tracked-item list for the config screen.
-  - `VenstoneEconomyClient` — entrypoint: keybinds, chat listener, HUD element, config screen.
+  - `UiScale` — pure interface-scale steps (60%..160%, 100% default). No Minecraft deps.
+  - `ItemEconomics` — pure derived economics for one item (unit/stack/quota prices, margin, remaining).
+  - `Clock` / `SystemClock` — monotonic, wall-anchored time source for the window.
+  - `TrackedItem` — one tracked item; sale lots, reset models, price history, config migration.
+  - `ItemResolver` — registry-backed id/name/stack-size lookup; degrades to pure rules without a registry.
+  - `SalesTracker` — item list, selection, preferences, persistence (atomic JSON), sale recording.
+  - `ShopCatalog` — local price database read from the shop; never erases a good value with a partial read.
+  - `ShopScanner` — reads the open container's slots and feeds the catalogue (settle-on-two-scans).
+  - `EconomyHud` — compact HUD panel and shared colour palette (`EconomyHud.Theme`).
+  - `EconomyScreen` — tabbed configuration screen (Tracked / Shop prices / Settings).
+  - `ItemListWidget` / `ShopListWidget` — scrollable entry lists for the configuration screen.
+  - `VenstoneEconomyClient` — entrypoint: keybinds, chat listener, shop scan, HUD element, config screen.
   - `VenstoneModMenu` — Mod Menu integration.
 - `src/main/resources/assets/venstone_economy_assistant/lang/` — translation keys (`en_us`, `fr_fr`)
-  for the keybinds, the HUD and the config screen.
+  for the keybinds, the HUD and the configuration screen. Both files must stay key-symmetric.
+
+## Domain rules
+- The sell limit is **universal**: 36 stacks per item per cycle (`StackMath.LIMIT_STACKS`). It is
+  derived from the item's real stack size (`Item.getMaxCount()`), never configured per item and never
+  taken from shop lore. 36 stacks is 2304 items for a 64-stack item, 576 for a 16-stack item.
+- Three prices are always kept distinct: unit price (one item), price per stack, quota revenue.
+- Margin (sell minus buy) is only shown when a buy price is known; a loss is reported as negative.
 
 ## Conventions and gotchas
 - Keep parsing conservative: prefer false negatives over false positives. `ShopTextParser`
@@ -32,16 +47,25 @@ limits. No server component, no packet inspection, no automation of selling.
   between verb and amount) and the **real** tooltip is
   `Clic gauche: Acheter: 2.00€ / Clic droit: Vendre: 0.12€ / Limite d'achat: 192 / Limite de vente: 384`.
   Sell price and sell limit must win over the buy ones. Keep these strings in the tests.
+- `ShopScanner.build(...)` is the pure, unit-testable decision layer (id, navigation filter, prices);
+  `describe(ItemStack)` only extracts the raw fields and delegates. Keep logic in `build`.
+- Never mutate a list's entries from inside that list's own `mouseClicked` handler; that corrupts the
+  widget's iteration. Selection changes call `syncFields`; only explicit actions call `reloadList`.
 - The reset model is configurable per `SalesTracker.ResetMode`. Venstone's observed rule is
   `WINDOW` (the default): a fixed 60-minute window anchored on the **first** sale, so the whole
-  quota returns 60 minutes after that first sale (~36 stacks per item). `ROLLING` keeps the
-  per-lot model, `TIMER` counts down once the limit is reached, `CLOCK` resets on the hour.
+  quota returns 60 minutes after that first sale. `ROLLING` keeps the per-lot model, `TIMER` counts
+  down once the limit is reached, `CLOCK` resets on the hour. The mode is global and persisted.
 - HUD rendering uses `HudElementRegistry.attachElementAfter(VanillaHudElements.CHAT, ...)`.
   `HudRenderCallback` is deprecated; do not reintroduce it.
+- HUD scaling is a single uniform `Matrix3x2fStack` scale around a design-unit layout; never scale
+  X and Y differently, and always `popMatrix()` in a `finally`.
+- Configs: `venstone-economy.json` (tracker, schema v3) and `venstone-shop-prices.json` (catalogue,
+  schema v1). Both migrate legacy shapes on load and skip malformed entries instead of discarding
+  the whole file. Writes are atomic (`.tmp` then move).
+- A price observation from a partial tooltip must never overwrite a stored value: only non-null
+  readings are applied (`ShopCatalog.record`).
 - Saves are written to a `.tmp` file and moved atomically. Persist only when something changed.
   A failed save is surfaced through `SalesTracker.lastError()` and shown on the config screen.
-- Config lives at `<config>/venstone-economy.json`, schema v2. Older bare-array configs and
-  pre-v2 `unitPrice` fields migrate on load. A single malformed entry is skipped, not fatal.
 - Seeding defaults happens only on first run (when the file does not exist).
 - The shop scan only reads slots that do not belong to the player's own inventory.
 - The Venstone shop lore/confirmation wording is not yet validated in-game; update

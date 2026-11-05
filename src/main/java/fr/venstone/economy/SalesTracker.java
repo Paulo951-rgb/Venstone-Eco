@@ -27,7 +27,7 @@ import java.util.List;
  */
 public final class SalesTracker {
     public static final long WINDOW_MILLIS = 60L * 60L * 1000L;
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
     /** Identical confirmations arriving within this delay are treated as one sale. */
     private static final long DEDUPE_WINDOW_MILLIS = 2_000L;
     private static final Logger LOGGER = LoggerFactory.getLogger("venstone-economy");
@@ -46,6 +46,8 @@ public final class SalesTracker {
     private boolean hudVisible = true;
     private HudCorner hudCorner = HudCorner.TOP_RIGHT;
     private ResetMode resetMode = ResetMode.WINDOW;
+    private int uiScaleIndex = UiScale.DEFAULT_INDEX;
+    private boolean autoTrack = true;
     private String lastMessage;
     private long lastMessageAt;
     private String lastError;
@@ -71,6 +73,33 @@ public final class SalesTracker {
     public HudCorner hudCorner() { return hudCorner; }
     public ResetMode resetMode() { return resetMode; }
     public Clock clock() { return clock; }
+
+    // --- Interface scale -------------------------------------------------------------------------
+
+    public int uiScaleIndex() { return UiScale.clampIndex(uiScaleIndex); }
+    public float uiScale() { return UiScale.factor(uiScaleIndex()); }
+
+    public void setUiScaleIndex(int index) {
+        int clamped = UiScale.clampIndex(index);
+        if (clamped == uiScaleIndex) return;
+        uiScaleIndex = clamped;
+        dirty = true;
+        save();
+    }
+
+    public void resetUiScale() { setUiScaleIndex(UiScale.DEFAULT_INDEX); }
+
+    /** Whether newly seen shop items are added to the tracked list automatically. */
+    public boolean autoTrack() { return autoTrack; }
+
+    public void setAutoTrack(boolean value) {
+        if (autoTrack == value) return;
+        autoTrack = value;
+        dirty = true;
+        save();
+    }
+
+    public void toggleAutoTrack() { setAutoTrack(!autoTrack); }
 
     /**
      * Sets the reset model globally and applies it to every tracked item. Persisted with the config.
@@ -141,21 +170,44 @@ public final class SalesTracker {
         if (item != null) { item.reset(); dirty = true; save(); }
     }
 
-    /** Adds a new tracked item; the id is resolved against the item registry when available. */
-    public boolean addItem(String id, String name, double price, int limitStacks) {
-        if (id == null || id.isBlank() || limitStacks < 1) return false;
+    /**
+     * Adds a new tracked item. The sell limit is always the shared 36 stacks, so callers only supply
+     * the item and its optional price; the limit is derived from the item's real stack size.
+     */
+    public boolean addItem(String id, String name, double price, int stackSize) {
+        if (id == null || id.isBlank()) return false;
         String resolved = ItemResolver.resolveId(id);
         String cleanId = resolved != null ? resolved : ItemIds.canonical(id);
         if (cleanId == null) return false;
         if (items.stream().anyMatch(i -> i.id != null && i.id.equalsIgnoreCase(cleanId))) return false;
         double cleanPrice = Double.isFinite(price) && price > 0 ? Math.min(price, ShopTextParser.MAX_UNIT_PRICE) : 0;
-        long limitItems = Math.min((long) limitStacks * TrackedItem.ITEMS_PER_STACK, TrackedItem.MAX_LIMIT_ITEMS);
         String cleanName = name == null || name.isBlank() ? ItemResolver.displayName(cleanId) : name.trim();
-        items.add(new TrackedItem(cleanId, cleanName, cleanPrice, (int) limitItems));
+        TrackedItem item = new TrackedItem(cleanId, cleanName, cleanPrice, StackMath.limitItems(stackSize));
+        item.stackSize = StackMath.clampStackSize(stackSize);
+        item.resetMode = resetMode;
+        items.add(item);
         selectedIndex = items.size() - 1;
         dirty = true;
         save();
         return true;
+    }
+
+    /** Adds a tracked item with the default stack size; convenience for manual entry. */
+    public boolean addItem(String id, String name, double price) {
+        return addItem(id, name, price, ItemResolver.stackSize(id));
+    }
+
+    /** Finds an existing tracked item, or creates one from the shop reading. */
+    public TrackedItem trackOrCreate(ShopCatalog.PriceEntry entry) {
+        if (entry == null || entry.id == null) return null;
+        TrackedItem existing = findByNameOrId(entry.id);
+        if (existing == null && entry.name != null) existing = findByNameOrId(entry.name);
+        if (existing != null) return existing;
+        if (!autoTrack) return null;
+        double price = entry.hasSellPrice() ? entry.sellPrice : 0;
+        String name = entry.name != null && !entry.name.isBlank() ? entry.name : ItemResolver.displayName(entry.id);
+        if (!addItem(entry.id, name, price, entry.stackSize)) return null;
+        return selected();
     }
 
     public void removeSelected() {
@@ -216,21 +268,24 @@ public final class SalesTracker {
         return true;
     }
 
-    public void updateShopDetails(String visibleText, String itemName) {
-        TrackedItem item = findByNameOrId(itemName);
+    /**
+     * Applies the prices the shop displayed for a tracked item. The sell limit is deliberately not
+     * applied: it is always the shared 36 stacks for every item, so a lore line can never change it.
+     * Callers batch several updates and save once.
+     */
+    public void applyShopPrices(String id, Double sellPrice, Double buyPrice) {
+        TrackedItem item = findByNameOrId(id);
         if (item == null) return;
-        Double price = ShopTextParser.readUnitPrice(visibleText);
-        Integer limit = ShopTextParser.readLimitItems(visibleText);
         boolean changed = false;
-        if (price != null && price > 0 && price <= ShopTextParser.MAX_UNIT_PRICE && price != item.observedPrice) {
-            item.observedPrice = price;
+        if (sellPrice != null && sellPrice > 0 && sellPrice <= ShopTextParser.MAX_UNIT_PRICE && sellPrice != item.observedPrice) {
+            item.observedPrice = sellPrice;
             changed = true;
         }
-        if (limit != null && limit > 0 && limit <= TrackedItem.MAX_LIMIT_ITEMS && limit != item.limitItems) {
-            item.limitItems = limit;
+        if (buyPrice != null && buyPrice > 0 && buyPrice <= ShopTextParser.MAX_UNIT_PRICE && buyPrice != item.observedBuyPrice) {
+            item.observedBuyPrice = buyPrice;
             changed = true;
         }
-        if (changed) { dirty = true; save(); }
+        if (changed) dirty = true;
     }
 
     private void remember(String signature, long now) {
@@ -278,6 +333,8 @@ public final class SalesTracker {
         root.addProperty("hudVisible", hudVisible);
         root.addProperty("hudCorner", hudCorner.name());
         root.addProperty("resetMode", resetMode.name());
+        root.addProperty("uiScaleIndex", uiScaleIndex);
+        root.addProperty("autoTrack", autoTrack);
         JsonArray array = new JsonArray();
         for (TrackedItem item : items) {
             JsonObject json = GSON.toJsonTree(item).getAsJsonObject();
@@ -308,19 +365,32 @@ public final class SalesTracker {
         for (TrackedItem item : items) {
             if (item.name == null || item.name.isBlank()) item.name = ItemIds.path(item.id);
             if (item.lots == null) item.lots = new ArrayList<>();
+            // The sell limit is universal: re-derive it from the item's real stack size so configs
+            // written before this rule existed still converge on 36 stacks.
+            item.limitItems = StackMath.limitItems(item.stackSize());
             item.resetMode = resetMode;
             item.normalize(now);
         }
         selectedIndex = items.isEmpty() ? 0 : Math.floorMod(selectedIndex, items.size());
         if (items.isEmpty() && firstRun) {
-            int limit = 36 * TrackedItem.ITEMS_PER_STACK;
-            items.add(new TrackedItem("minecraft:sugar_cane", "Canne à sucre", 0.12, limit));
-            items.add(new TrackedItem("minecraft:cactus", "Cactus", 0.05, limit));
-            items.add(new TrackedItem("minecraft:pumpkin", "Citrouille", 0.10, limit));
-            items.add(new TrackedItem("minecraft:melon_slice", "Tranche de pastèque", 0.06, limit));
-            for (TrackedItem item : items) item.resetMode = resetMode;
+            seedDefaults();
             save();
         }
+    }
+
+    private void seedDefaults() {
+        seed("minecraft:sugar_cane", "Canne à sucre", 0.12);
+        seed("minecraft:cactus", "Cactus", 0.05);
+        seed("minecraft:pumpkin", "Citrouille", 0.10);
+        seed("minecraft:melon_slice", "Tranche de pastèque", 0.06);
+    }
+
+    private void seed(String id, String name, double price) {
+        TrackedItem item = new TrackedItem(id, name, price, StackMath.limitItems(StackMath.DEFAULT_STACK_SIZE));
+        item.stackSize = StackMath.clampStackSize(ItemResolver.stackSize(id));
+        item.limitItems = StackMath.limitItems(item.stackSize);
+        item.resetMode = resetMode;
+        items.add(item);
     }
 
     private void readObject(JsonObject root) {
@@ -330,6 +400,8 @@ public final class SalesTracker {
         }
         hudVisible = boolOr(root, "hudVisible", hudVisible);
         selectedIndex = intOr(root, "selectedIndex", selectedIndex);
+        uiScaleIndex = UiScale.clampIndex(intOr(root, "uiScaleIndex", uiScaleIndex));
+        autoTrack = boolOr(root, "autoTrack", autoTrack);
         if (root.has("hudCorner") && root.get("hudCorner").isJsonPrimitive()) {
             try { hudCorner = HudCorner.valueOf(root.get("hudCorner").getAsString()); }
             catch (IllegalArgumentException ignored) { }
