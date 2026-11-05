@@ -10,8 +10,8 @@ Client-side Fabric utility for tracking per-item shop sale limits on Venstone.
 - Optional Mod Menu 17.x
 
 ## Sell-limit reset models
-The shop is EconomyShopGUI. Its sell limit does not use a fixed sliding window, so the app offers
-three models, selectable from the configuration screen:
+The shop is EconomyShopGUI. Its sell limit does not use a per-lot sliding window, so the app offers
+four models, selectable from the configuration screen:
 
 - **60 min from 1st sale** (default, matches Venstone) — a fixed 60-minute window anchored on the
   first sale; the whole quota (~36 stacks per item) returns 60 minutes after that first sale.
@@ -53,8 +53,31 @@ Requires JDK 21. The Gradle wrapper pins Gradle 9.2.1 (Fabric Loom 1.14.x requir
 
 On Windows, run `build.bat`. The JAR is written to `build/libs/venstone-economy-assistant-1.2.0.jar`.
 
+## Install and run
+
+1. Install Fabric Loader 0.18.x for Minecraft 1.21.11.
+2. Put the built JAR in the instance `mods` folder:
+   `%APPDATA%\.minecraft\mods` (or the PrismLauncher instance's `minecraft\mods`).
+3. Add `fabric-api-0.141.3+1.21.11.jar` to `mods` (required). Mod Menu 17.x is optional
+   but recommended: it adds a config button in the mod list.
+4. Launch the Fabric 1.21.11 profile. The mod is client-side only, so it also works on servers.
+
+Verify the build without launching the game:
+
+```
+./gradlew test
+```
+
+Launch a development client straight from the project (downloads the assets on first run):
+
+```
+./gradlew runClient
+```
+
+The mod is loaded when `logs/latest.log` contains `venstone-economy` startup lines.
+
 ## Tests
-The parser and the rolling-window tracking logic have automated tests:
+The parser and the sell-limit tracking logic have automated tests:
 
 ```
 ./gradlew test

@@ -313,10 +313,11 @@ public final class SalesTracker {
         }
         selectedIndex = items.isEmpty() ? 0 : Math.floorMod(selectedIndex, items.size());
         if (items.isEmpty() && firstRun) {
-            items.add(new TrackedItem("minecraft:sugar_cane", "Canne à sucre", 0.12, 384));
-            items.add(new TrackedItem("minecraft:cactus", "Cactus", 0.05, 384));
-            items.add(new TrackedItem("minecraft:pumpkin", "Citrouille", 0.10, 384));
-            items.add(new TrackedItem("minecraft:melon_slice", "Tranche de pastèque", 0.06, 384));
+            int limit = 36 * TrackedItem.ITEMS_PER_STACK;
+            items.add(new TrackedItem("minecraft:sugar_cane", "Canne à sucre", 0.12, limit));
+            items.add(new TrackedItem("minecraft:cactus", "Cactus", 0.05, limit));
+            items.add(new TrackedItem("minecraft:pumpkin", "Citrouille", 0.10, limit));
+            items.add(new TrackedItem("minecraft:melon_slice", "Tranche de pastèque", 0.06, limit));
             for (TrackedItem item : items) item.resetMode = resetMode;
             save();
         }

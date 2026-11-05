@@ -40,9 +40,13 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
     private static KeyBinding toggleKey;
     private static int scanTicker;
     private static int notificationCooldown;
+    /** Cached clock reading, refreshed once per tick so the render path never re-reads the clock. */
+    private static volatile long cachedNow;
 
     @Override public void onInitializeClient() {
         KeyBinding.Category category = KeyBinding.Category.create(Identifier.of("venstone", "general"));
+        LOGGER.info("Venstone Economy Assistant initialised ({} tracked items, reset mode {})",
+                TRACKER.items().size(), TRACKER.resetMode());
         openKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.venstone_economy.open", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_O, category));
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -53,6 +57,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
         });
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            cachedNow = TRACKER.clock().now();
             TRACKER.tick();
             if (notificationCooldown > 0) notificationCooldown--;
             while (openKey.wasPressed()) if (client.currentScreen == null) client.setScreen(new EconomyScreen(null));
@@ -142,7 +147,7 @@ public final class VenstoneEconomyClient implements ClientModInitializer {
         ctx.drawTextWithShadow(mc.textRenderer, Text.literal(total), x + width - mc.textRenderer.getWidth(total) - 10, y + 8, 0xFFB9A9C8);
 
         int row = 0;
-        long now = TRACKER.clock().now();
+        long now = cachedNow != 0 ? cachedNow : TRACKER.clock().now();
         for (TrackedItem item : TRACKER.items()) {
             if (!item.enabled) continue;
             if (row >= rows) break;
