@@ -5,8 +5,11 @@
   "name": "Venstone Economy Assistant",
   "description": "Client-side economic sales-limit tracker with a configurable HUD.",
   "authors": ["Venstone Economy Assistant contributors"],
-  "contact": {},
+  "contact": {
+    "sources": "https://github.com/Paulo951-rgb/Venstone-Eco"
+  },
   "license": "MIT",
+  "icon": "assets/venstone_economy_assistant/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": ["fr.venstone.economy.VenstoneEconomyClient"],
@@ -18,6 +21,5 @@
     "java": ">=21",
     "fabric-api": "*"
   },
-  "suggests": {"modmenu": ">=17.0.0"},
-  "custom": {"modmenu": {"links": {"modmenu.discord": "https://venstone.xyz/"}}}
+  "suggests": {"modmenu": ">=17.0.0"}
 }
