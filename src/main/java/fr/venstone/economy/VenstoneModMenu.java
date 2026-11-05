@@ -5,6 +5,6 @@ import com.terraformersmc.modmenu.api.ModMenuApi;
 
 public final class VenstoneModMenu implements ModMenuApi {
     @Override public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        return VenstoneEconomyClient.EconomyScreen::new;
+        return parent -> new EconomyScreen(parent, VenstoneEconomyClient.CATALOG, null);
     }
 }

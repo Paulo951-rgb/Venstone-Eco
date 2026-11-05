@@ -36,10 +36,18 @@ public final class ShopTextParser {
             "(?i)\\b(?:prix(?:\\s*(?:de\\s*)?(?:vente|sell))?|(?<!de )vente\\s*[:=]|sell\\s*price|sale\\s*price|price)\\s*[:=]?\\s*"
                     + "([0-9]+(?:[.,][0-9]+)?)\\s*(?:€|euros?)?");
 
+    // Buy price, used to complete the catalogue alongside the sell price.
+    private static final Pattern BUY_PRICE = Pattern.compile(
+            "(?i)\\b(?:acheter|buy\\s*price|prix\\s*d?achat)\\b"
+                    + "[^0-9]{0,12}?([0-9]+(?:[.,][0-9]+)?)\\s*(?:€|euros?)?");
+
     // Sell limit first: the tooltip shows both "Limite d'achat" and "Limite de vente"; only the
     // latter governs selling. Words are tolerated between "limite" and "vente".
     private static final Pattern SELL_LIMIT = Pattern.compile(
             "(?i)\\blimites?\\b[^0-9]{0,24}?\\bvente\\b[^0-9]{0,12}?[:=]?\\s*"
+                    + "([0-9]+)(\\s*(?:stacks?|items?|unités?|units?))?");
+    private static final Pattern BUY_LIMIT = Pattern.compile(
+            "(?i)\\blimites?\\b[^0-9]{0,24}?\\bachat\\b[^0-9]{0,12}?[:=]?\\s*"
                     + "([0-9]+)(\\s*(?:stacks?|items?|unités?|units?))?");
     private static final Pattern LIMIT = Pattern.compile(
             "(?i)\\b(?:limites?|limits?|max(?:imum)?|restants?|remaining)\\s*[:=]?\\s*([0-9]+)"
@@ -68,11 +76,21 @@ public final class ShopTextParser {
         }
     }
 
+    /** Buy price read from a tooltip, or {@code null} when the tooltip shows no buy line. */
+    public static Double readBuyPrice(String text) {
+        return firstPrice(BUY_PRICE, text == null ? "" : text);
+    }
+
     /** Item limit read from a tooltip, preferring the sell limit over the buy limit. */
     public static Integer readLimitItems(String text) {
         String raw = text == null ? "" : text;
         Integer sell = firstLimit(SELL_LIMIT, raw);
         return sell != null ? sell : firstLimit(LIMIT, raw);
+    }
+
+    /** Buy limit read from a tooltip, or {@code null} when the tooltip shows no buy limit. */
+    public static Integer readBuyLimitItems(String text) {
+        return firstLimit(BUY_LIMIT, text == null ? "" : text);
     }
 
     private static Integer firstLimit(Pattern pattern, String text) {

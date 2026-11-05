@@ -8,11 +8,9 @@ import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
 import net.minecraft.client.gui.screen.narration.NarrationPart;
 import net.minecraft.text.Text;
 
-import java.util.Locale;
-
-/** Scrollable list of tracked items shown on the left of the configuration screen. */
+/** Compact scrollable list of tracked items shown on the left of the configuration screen. */
 final class ItemListWidget extends EntryListWidget<ItemListWidget.ItemEntry> {
-    private static final int ROW_HEIGHT = 24;
+    private static final int ROW_HEIGHT = 20;
 
     private final SalesTracker tracker;
     private Runnable selectionListener = () -> { };
@@ -34,13 +32,13 @@ final class ItemListWidget extends EntryListWidget<ItemListWidget.ItemEntry> {
         if (index >= 0 && index < children().size()) setSelected(children().get(index));
     }
 
-    @Override public int getRowWidth() { return getWidth() - 12; }
+    @Override public int getRowWidth() { return getWidth() - 8; }
 
     @Override protected void appendClickableNarrations(NarrationMessageBuilder builder) {
         builder.put(NarrationPart.TITLE, Text.translatable("venstone_economy.screen.title"));
     }
 
-    /** A single tracked item, drawn as name plus a rolling-window summary. */
+    /** A single tracked item: name on the left, quota on the right. */
     final class ItemEntry extends EntryListWidget.Entry<ItemEntry> {
         private final int index;
 
@@ -53,18 +51,26 @@ final class ItemListWidget extends EntryListWidget<ItemListWidget.ItemEntry> {
             int x = getContentX();
             int width = getContentWidth();
             int y = getContentY();
-            if (tracker.selectedIndex() == index) ctx.fill(x - 2, y - 1, x + width + 2, y + getContentHeight() - 1, 0x66483468);
-            int nameColor = item.enabled ? 0xFFFFFFFF : 0xFF8C8398;
+            boolean selected = tracker.selectedIndex() == index;
+            if (selected) ctx.fill(x - 3, y, x + width + 3, y + getContentHeight() - 2, EconomyHud.Theme.ACCENT_DIM & 0x60FFFFFF);
+            if (hovered && !selected) ctx.fill(x - 3, y, x + width + 3, y + getContentHeight() - 2, 0x22FFFFFF);
+
             String label = item.name == null || item.name.isBlank() ? item.id : item.name;
-            String name = client.textRenderer.trimToWidth(label, width - 6);
-            ctx.drawTextWithShadow(client.textRenderer, Text.literal(name), x, y + 2, nameColor);
-            String stacks = String.format(Locale.ROOT, "%.1f / %.1f", item.soldItems(now) / (double) TrackedItem.ITEMS_PER_STACK,
-                    item.limitItems / (double) TrackedItem.ITEMS_PER_STACK);
-            int countColor = item.remainingItems(now) == 0 ? 0xFFFF8888 : 0xFFBFA9D9;
-            ctx.drawTextWithShadow(client.textRenderer, Text.literal(stacks + " stacks"), x, y + 12, countColor);
+            ItemEconomics eco = item.economics(now);
+            String quota = StackMath.stacks(eco.soldItems(), eco.stackSize()) + "/" + StackMath.stacks(eco.limitItems(), eco.stackSize());
+            int quotaWidth = client.textRenderer.getWidth(quota);
+            int nameColor = item.enabled ? EconomyHud.Theme.TEXT : EconomyHud.Theme.SUBTLE;
+            String name = client.textRenderer.trimToWidth(label, Math.max(10, width - quotaWidth - 10));
+            ctx.drawTextWithShadow(client.textRenderer, Text.literal(name), x, y + 1, nameColor);
+            int quotaColor = eco.remainingItems() == 0 ? EconomyHud.Theme.DANGER
+                    : (item.enabled ? EconomyHud.Theme.MUTED : EconomyHud.Theme.SUBTLE);
+            ctx.drawTextWithShadow(client.textRenderer, Text.literal(quota), x + width - quotaWidth, y + 1, quotaColor);
+            String detail = Text.translatable("venstone_economy.list.max", EconomyHud.formatMoney(eco.maxRevenue())).getString();
+            ctx.drawTextWithShadow(client.textRenderer, Text.literal(detail), x, y + 10, EconomyHud.Theme.SUBTLE);
             if (!item.enabled) {
                 String off = Text.translatable("venstone_economy.status.disabled").getString();
-                ctx.drawTextWithShadow(client.textRenderer, Text.literal(off), x + width - client.textRenderer.getWidth(off), y + 12, 0xFF8C8398);
+                ctx.drawTextWithShadow(client.textRenderer, Text.literal(off),
+                        x + width - client.textRenderer.getWidth(off), y + 10, EconomyHud.Theme.SUBTLE);
             }
         }
 

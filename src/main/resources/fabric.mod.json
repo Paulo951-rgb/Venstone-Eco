@@ -3,7 +3,7 @@
   "id": "venstone_economy_assistant",
   "version": "${version}",
   "name": "Venstone Economy Assistant",
-  "description": "Client-side economic sales-limit tracker with a configurable HUD.",
+  "description": "Client-side Venstone economy tracker: reads shop prices, models the 36-stack sale limit and shows a compact, scalable economy HUD.",
   "authors": ["Venstone Economy Assistant contributors"],
   "contact": {
     "sources": "https://github.com/Paulo951-rgb/Venstone-Eco"
